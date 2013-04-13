@@ -2,7 +2,7 @@
 (*
  Copyright (c) Juan Jose Garcia Ripoll and Ivan Raikov.
  All rights reserved.
- 
+
 Redistribution and use in source and binary forms, with or
 without modification, are permitted provided that the following
 conditions are met:
@@ -37,6 +37,7 @@ TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
 OF SUCH DAMAGE.
 *)
+
 
 signature MONO_VECTOR =
   sig
@@ -203,233 +204,240 @@ signature INDEX =
         val any : t -> (t -> bool) -> bool
         val app : t -> (t -> unit) -> unit
     end
+
 structure Index : INDEX =
     struct
-        type t = int list
-        type indexer = t -> int
-        datatype storage = RowMajor | ColumnMajor
+	type t = int list
+	type indexer = t -> int
+	datatype storage = RowMajor | ColumnMajor
 
-        exception Index
-        exception Shape
+	exception Index
+	exception Shape
 
-        val order = ColumnMajor
+	val order = ColumnMajor
 
-        fun validShape shape = List.all (fn x => x > 0) shape
+	fun validShape shape = List.all (fn x => x > 0) shape
 
-        fun validIndex index = List.all (fn x => x >= 0) index
+	fun validIndex index = List.all (fn x => x >= 0) index
 
-        fun toInt shape index =
-            let fun loop ([], [], accum, _) = accum
-                  | loop ([], _, _, _) = raise Index
-                  | loop (_, [], _, _) = raise Index
-                  | loop (i::ri, l::rl, accum, fac) =
-                if (i >= 0) andalso (i < l) then
-                    loop (ri, rl, i*fac + accum, fac*l)
-                else
-                    raise Index
-            in loop (index, shape, 0, 1)
-            end
+	fun toInt shape index =
+	    let fun loop ([], [], accum, p) = accum
+		  | loop ([], _, _, _) = raise Index
+		  | loop (_, [], _, _) = raise Index
+		  | loop (i::ri, l::rl, accum, p) =
+		if (i >= 0) andalso (i < l) then
+		    loop (ri, rl, i * p + accum, p * l)
+		else
+		    raise Index
+	    in loop (index, shape, 0, 1)
+	    end
 
-        (* ----- CACHED LINEAR INDEXER -----
+	(* ----- CACHED LINEAR INDEXER -----
 
-           An indexer is a function that takes a list of
-           indices, validates it and produces a nonnegative
-           integer number. In short, the indexer is the
-           mapper from indices to element positions in
-           arrays.
+	   An indexer is a function that takes a list of
+	   indices, validates it and produces a nonnegative
+	   integer number. In short, the indexer is the
+	   mapper from indices to element positions in
+	   arrays.
 
-           'indexer' builds such a mapper by optimizing
-           the most common cases, which are 1d and 2d
-           tensors.
-         *)
+	   'indexer' builds such a mapper by optimizing
+	   the most common cases, which are 1d and 2d
+	   tensors.
+	 *)
     local
-        fun doindexer [] _ = raise Shape
-          | doindexer [a] [dx] =
-            let fun f [x] = if (x > 0) andalso (x < a)
-                            then x
-                            else raise Index
-                  | f _ = raise Index
-            in f end
-          | doindexer [a,b] [dx, dy] =
-            let fun f [x,y] = if ((x > 0) andalso (x < a) andalso
-                                  (y > 0) andalso (y < b))
-                              then x + dy * y
-                              else raise Index
-                  | f _ = raise Index
-            in f end
-          | doindexer [a,b,c] [dx,dy,dz] =
-            let fun f [x,y,z] = if ((x > 0) andalso (x < a) andalso
-                                    (y > 0) andalso (y < b) andalso
-                                    (z > 0) andalso (z < c))
-                                then x + dy * y + dz * z
-                                else raise Index
-                  | f _ = raise Index
-            in f end
-          | doindexer shape memo =
-            let fun f [] [] accum [] = accum
-                  | f _  _  _ [] = raise Index
-                  | f (fac::rf) (ndx::ri) accum (dim::rd) =
-                    if (ndx >= 0) andalso (ndx < dim) then
-                        f rf ri (accum + ndx * fac) rd
-                    else
-                        raise Index
-            in f shape memo 0
-            end
+	fun doindexer [] _ = raise Shape
+	  | doindexer [a] [dx] =
+	    let fun f [x] = if (x > 0) andalso (x < a)
+		            then x
+			    else raise Index
+		  | f _ = raise Index
+	    in f end
+	  | doindexer [a,b] [dx, dy] =
+		let fun f [x,y] = if ((x >= 0) andalso (x < a) andalso
+				      (y >= 0) andalso (y < b))
+				  then x + dy * y
+				  else raise Index
+		      | f _ = raise Index
+		in f end
+	  | doindexer [a,b,c] [dx,dy,dz] =
+		let fun f [x,y,z] = if ((x >= 0) andalso (x < a) andalso
+					(y >= 0) andalso (y < b) andalso
+					(z >= 0) andalso (z < c))
+			            then x + dy * y + dz * z
+				    else raise Index
+		      | f _ = raise Index
+		in f end
+	  | doindexer shape memo =
+		let fun f [] [] accum [] = accum
+		      | f _  _  _ [] = raise Index
+		      | f (fact::rf) (ndx::ri) accum (dim::rd) =
+			if (ndx >= 0) andalso (ndx < dim) then
+			    f rf ri (accum + ndx * fact) rd
+			else
+			    raise Index
+		in f shape memo 0
+		end
     in
-        fun indexer shape =
-            let fun memoize accum [] = []
-                  | memoize accum (dim::rd) =
-                    accum :: (memoize (dim * accum) rd)
-            in
-                if validShape shape
-                then doindexer shape (memoize 1 shape)
-                else raise Shape
-            end
+	fun indexer shape =
+	    let fun memoize accum [] = []
+		  | memoize accum (dim::rd) =
+		accum :: (memoize (dim * accum) rd)
+	    in if validShape shape then
+		   doindexer shape (memoize 1 shape)
+	       else
+		   raise Shape
+	    end
     end
 
-        fun length shape =
-            let fun prod (a,b) =
-                if b < 0 then raise Shape else a * b
-            in foldl prod 1 shape
-            end
+	fun length shape =
+	    let fun prod (a,b) =
+		if b < 0 then raise Shape else a * b
+	    in foldl prod 1 shape
+	    end
 
-        fun first shape = map (fn x => 0) shape
+	fun first shape = map (fn x => 0) shape
 
-        fun last [] = []
-          | last (size :: rest) =
-            if size < 1
-            then raise Shape
-            else size - 1 :: last rest
+	fun last [] = []
+	  | last (size :: rest) = size - 1 :: last rest
 
-        fun next' [] [] = raise Subscript
-          | next' _ [] = raise Index
-          | next' [] _ = raise Index
-          | next' (dimension::restd) (index::resti) =
-            if (index + 1) < dimension
-            then (index + 1) :: resti
-            else 0 :: (next' restd resti)
+	fun next' [] [] = raise Subscript
+	  | next' _ [] = raise Index
+	  | next' [] _ = raise Index
+	  | next' (dimension::restd) (index::resti) =
+	    if (index + 1) < dimension then
+		(index + 1) :: resti
+	    else
+		0 :: (next' restd resti)
 
-        fun prev' [] [] = raise Subscript
-          | prev' _ [] = raise Index
-          | prev' [] _ = raise Index
-          | prev' (dimension::restd) (index::resti) =
-            if (index > 0)
-            then index - 1 :: resti
-            else dimension - 1 :: prev' restd resti
+	fun prev' [] [] = raise Subscript
+	  | prev' _ [] = raise Index
+	  | prev' [] _ = raise Index
+	  | prev' (dimension::restd) (index::resti) =
+	    if (index > 0) then
+		(index - 1) :: resti
+	    else
+		(dimension - 1) :: (prev' restd resti)
 
-        fun next shape index = (SOME (next' shape index)) handle
-            Subscript => NONE
+	fun next shape index = (SOME (next' shape index)) handle
+	    Subscript => NONE
 
-        fun prev shape index = (SOME (prev' shape index)) handle
-            Subscript => NONE
+	fun prev shape index = (SOME (prev' shape index)) handle
+	    Subscript => NONE
 
-        fun inBounds shape index =
-            ListPair.all (fn (x,y) => (x >= 0) andalso (x < y))
-            (index, shape)
+	fun inBounds shape index =
+	    ListPair.all (fn (x,y) => (x >= 0) andalso (x < y))
+	    (index, shape)
 
-        fun compare ([],[]) = EQUAL
-          | compare (_, []) = raise Index
-          | compare ([],_) = raise Index
-          | compare (a::ra, b::rb) =
-            case Int.compare (a,b) of
-                EQUAL => compare (ra,rb)
-              | LESS => LESS
-              | GREATER => GREATER
-
-    local
-        fun iterator a inner =
-            let fun loop accum f =
-                let fun innerloop i =
-                    if i < a
-                    then if inner (i::accum) f
-                         then innerloop (i+1)
-                         else false
-                    else true
-                in innerloop 0
-                end
-            in loop
-            end
-        fun build_iterator [a] =
-            let fun loop accum f =
-                let fun innerloop i =
-                    if i < a
-                    then if f (i::accum)
-                         then innerloop (i+1)
-                         else false
-                    else true
-                in innerloop 0
-                end
-            in loop
-            end
-          | build_iterator (a::rest) = iterator a (build_iterator rest)
-    in
-        fun all shape = build_iterator shape []
-    end
+	fun compare ([],[]) = EQUAL
+	  | compare (_, []) = raise Index
+	  | compare ([],_) = raise Index
+	  | compare (a::ra, b::rb) =
+	    case Int.compare (a,b) of
+		EQUAL => compare (ra,rb)
+	      | LESS => LESS
+	      | GREATER => GREATER
 
     local
-        fun iterator a inner =
-            let fun loop accum f =
-                let fun innerloop i =
-                    if i < a
-                    then if inner (i::accum) f
-                         then true
-                         else innerloop (i+1)
-                    else false
-                in innerloop 0
-                end
-            in loop
-            end
-        fun build_iterator [a] =
-            let fun loop accum f =
-                let fun innerloop i =
-                    if i < a
-                    then if f (i::accum)
-                         then true
-                         else innerloop (i+1)
-                    else false
-                in innerloop 0
-                end
-            in loop
-            end
-          | build_iterator (a::rest) = iterator a (build_iterator rest)
+	fun iterator a inner =
+	    let fun loop accum f =
+		let fun innerloop i =
+		    if i < a then
+			if inner (i::accum) f then
+			    innerloop (i+1)
+			else
+			    false
+		    else
+			true
+		in innerloop 0
+		end
+	    in loop
+	    end
+	fun build_iterator [a] =
+	    let fun loop accum f =
+		let fun innerloop i =
+		    if i < a then
+			if f (i::accum) then
+			    innerloop (i+1)
+			else
+			    false
+		    else
+			true
+		in innerloop 0
+		end
+	    in loop
+	    end
+	  | build_iterator (a::rest) = iterator a (build_iterator rest)
     in
-        fun any shape = build_iterator shape []
+	fun all shape = build_iterator shape []
     end
 
     local
-        fun iterator a inner =
-            let fun loop accum f =
-                let fun innerloop i =
-                    if i < a
-                    then (inner (i::accum) f;
-                          innerloop (i+1))
-                    else ()
-                in innerloop 0
-                end
-            in loop
-            end
-        fun build_iterator [a] =
-            let fun loop accum f =
-                let fun innerloop i =
-                    if i < a
-                    then (f (i::accum); innerloop (i+1))
-                    else ()
-                in innerloop 0
-                end
-            in loop
-            end
-          | build_iterator (a::rest) = iterator a (build_iterator rest)
+	fun iterator a inner =
+	    let fun loop accum f =
+		let fun innerloop i =
+		    if i < a then
+			if inner (i::accum) f then
+			    true
+			else
+			    innerloop (i+1)
+		    else
+			false
+		in innerloop 0
+		end
+	    in loop
+	    end
+	fun build_iterator [a] =
+	    let fun loop accum f =
+		let fun innerloop i =
+		    if i < a then
+			if f (i::accum) then
+			    true
+			else
+			    innerloop (i+1)
+		    else
+			false
+		in innerloop 0
+		end
+	    in loop
+	    end
+	  | build_iterator (a::rest) = iterator a (build_iterator rest)
     in
-        fun app shape = build_iterator shape []
+	fun any shape = build_iterator shape []
     end
 
-        fun a < b = compare(a,b) = LESS
-        fun a > b = compare(a,b) = GREATER
-        fun eq (a, b) = compare(a,b) = EQUAL
-        fun a <> b = not (a = b)
-        fun a <= b = not (a > b)
-        fun a >= b = not (a < b)
-        fun a - b = ListPair.map Int.- (a,b)
+    local
+	fun iterator a inner =
+	    let fun loop accum f =
+		let fun innerloop i =
+		    case i < a of
+			true => (inner (i::accum) f; innerloop (i+1))
+		      | false => ()
+		in innerloop 0
+		end
+	    in loop
+	    end
+	fun build_iterator [a] =
+	    let fun loop accum f =
+		let fun innerloop i =
+		    case i < a of
+			true => (f (i::accum); innerloop (i+1))
+		      | false => ()
+		in innerloop 0
+		end
+	    in loop
+	    end
+	  | build_iterator (a::rest) = iterator a (build_iterator rest)
+    in
+	fun app shape = build_iterator shape []
+    end
+
+	fun a < b = compare(a,b) = LESS
+	fun a > b = compare(a,b) = GREATER
+	fun eq (a, b) = compare(a,b) = EQUAL
+	fun a <> b = not (a = b)
+	fun a <= b = not (a > b)
+	fun a >= b = not (a < b)
+	fun a - b = ListPair.map Int.- (a,b)
 
     end
 
@@ -456,7 +464,11 @@ signature RANGE =
 	val next : t -> index -> index option
 	val prev : t -> index -> index option
         val ranges : index -> ((index * index) list) -> t
+
 	val iteri : (index -> bool) -> t -> bool
+	val iteri2 : (index * index -> bool) -> (t * t) -> bool
+
+        
     end
 
 structure Range : RANGE =
@@ -518,7 +530,7 @@ struct
 	fun nested_loop f (first : int) (last : int) =
 	    let fun loop (ndx: index) (g: index -> bool) =
 		let fun innerloop i =
-		    (if i > last then
+                     (if i > last then
 			true
 		    else if (f (i::ndx) g) then
 			innerloop (i+1)
@@ -533,6 +545,37 @@ struct
             simple_loop a b
 	  | build_iterator (a::ra) (b::rb) =
 	    nested_loop (build_iterator ra rb) a b
+
+	fun simple_loop2 (first : int) (last : int) (first' : int) (last' : int) =
+	    let fun loop (ndx : index) (ndx' : index) (g: index * index -> bool) =
+		let fun innerloop (i,j) =
+		    if i > last andalso j > last' then
+			true
+		    else if g (i::ndx,j::ndx') then
+			innerloop (i+1,j+1)
+		    else
+			false
+		in innerloop (first,first') end
+	    in loop end
+
+	fun nested_loop2 f (first : int) (last : int) (first' : int) (last' : int) =
+	    let fun loop (ndx: index) (ndx': index) (g: index * index -> bool) =
+		let fun innerloop (i,j) =
+		    (if i > last andalso j > last' then
+			true
+		    else if (f (i::ndx) (j::ndx') g) then
+			innerloop (i+1,j+1)
+		    else
+			false)
+		in 
+                     innerloop (first,first')
+                end
+	    in loop end
+
+	fun build_iterator2 ([a] : index) ([b] : index) ([a'] : index) ([b'] : index) = 
+            simple_loop2 a b a' b'
+	  | build_iterator2 (a::ra) (b::rb) (a'::ra') (b'::rb') =
+	    nested_loop2 (build_iterator2 ra rb ra' rb') a b a' b'
 
     in
 
@@ -558,10 +601,11 @@ struct
                  (if Index.> (lo,lo') then ((lo',up')::ranges) else ((lo,up')::ranges) ))
           | range_append ((lo,up),[]) = [(lo,up)]
 
+
         fun ranges' shape ((lo, up) :: rest) = 
-	    if (Index.validShape shape) andalso (Index.validIndex lo) andalso (Index.validIndex up) andalso
+	    (if (Index.validShape shape) andalso (Index.validIndex lo) andalso (Index.validIndex up) andalso
                (Index.inBounds shape lo) andalso (Index.inBounds shape up) andalso Index.< (lo,up)
-               then range_append ((lo,up), (ranges' shape rest)) else (ranges' shape rest)
+               then range_append ((lo,up), (ranges' shape rest)) else (ranges' shape rest))
             | ranges' shape ([]) = []
 
         fun ranges shape xs = 
@@ -653,9 +697,17 @@ struct
 	   all the indices in the range, *)
 	fun iteri f RangeEmpty = f []
 	  | iteri (f: index -> bool) (RangeIn(shape,lo: index,up: index)) = 
-           (build_iterator lo up) lo f
+           (build_iterator lo up) [] f
 	  | iteri (f: index -> bool) (RangeSet(shape,set)) = 
-           List.all (fn (lo,up) => (build_iterator lo up) lo f) set
+           List.all (fn (lo,up) => (build_iterator lo up) [] f) set
+
+	(* Builds an interator that applies 'f' sequentially to
+	   all the indices of the two ranges, *)
+	fun iteri2 f (RangeEmpty,RangeEmpty) = f ([],[])
+	  | iteri2 (f: index * index -> bool) (RangeIn(shape,lo: index,up: index),RangeIn(shape',lo': index,up': index)) = 
+            if shape=shape' then (build_iterator2 lo up lo' up') [] [] f else raise Range
+	  | iteri2 (f: index * index -> bool) (RangeSet(shape,set),RangeSet(shape',set')) = 
+           if shape=shape' then ListPair.all (fn ((lo,up),(lo',up')) => (build_iterator2 lo up lo' up') [] [] f) (set,set') else raise Range
 
     end
 end
@@ -742,7 +794,7 @@ signature TENSOR =
         val all : ('a -> bool) -> 'a tensor -> bool
         val any : ('a -> bool) -> 'a tensor -> bool
 
-        val cat : int * 'a tensor * 'a tensor -> 'a tensor        
+        val cat :  'a tensor * 'a tensor * int -> 'a tensor        
     end
 
 
@@ -761,8 +813,9 @@ signature TENSOR_SLICE =
         val base   : 'a slice -> 'a tensor
         val shape  : 'a slice -> (index)
 
-        val map : ('a -> 'b) -> 'a slice -> 'b Vector.vector
-        val map2 : ('a * 'b -> 'c) -> 'a slice -> 'b slice -> 'c Vector.vector
+        val app : ('a -> unit) -> 'a slice -> unit
+        val map : ('a -> 'b) -> 'a slice -> 'b tensor
+        val map2 : ('a * 'b -> 'c) -> 'a slice -> 'b slice -> 'c tensor
         val foldl  : ('a * 'b -> 'b) -> 'b -> 'a slice -> 'b
 
     end
@@ -807,7 +860,7 @@ structure Tensor : TENSOR =
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
 
-      fun cat (dim, x: 'a tensor, y: 'a tensor) =
+      fun cat (x: 'a tensor, y: 'a tensor, dim) =
         (let val xshape = (#shape x)
              val yshape = (#shape y)
              val xdata  = (#data x)
@@ -964,10 +1017,57 @@ structure TensorSlice : TENSOR_SLICE =
                  shape=(Range.shape r),
                  tensor=tensor}
             end
+
         fun length ({range, shape, tensor}) = Range.length range
         fun base ({range, shape, tensor}) = tensor
         fun shape ({range, shape, tensor}) = Range.shape range
 
+        fun map f slice = 
+        let
+           val te  = #tensor slice
+           val ra  = #range slice
+           val fndx  = Range.first ra
+           val arr = Array.array(length(slice),f (Tensor.sub(te,fndx)))
+           val i   = ref 0
+        in 
+           Range.iteri (fn (ndx) => let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
+           Tensor.fromArray ((#shape slice), arr)
+        end
+
+        fun app f (slice: 'a slice) = 
+        let
+           val te  = #tensor slice
+           val ra  = #range slice
+           val fndx  = Range.first ra
+        in 
+           Range.iteri (fn (ndx) => (f (Tensor.sub (te,ndx)); true)) ra; ()
+        end
+
+        fun map2 f (sl1: 'a slice) (sl2: 'b slice) = 
+        let
+           val _    = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
+           val te1  = #tensor sl1
+           val te2  = #tensor sl2
+           val ra1  = #range sl1
+           val ra2  = #range sl2
+           val fndx1  = Range.first ra1
+           val fndx2  = Range.first ra2
+           val arr   = Array.array(length(sl1),f (Tensor.sub(te1,fndx1),Tensor.sub(te2,fndx2)))
+           val i     = ref 0
+        in 
+           Range.iteri2 (fn (ndx,ndx') => let val v = f (Tensor.sub (te1,ndx),Tensor.sub (te2,ndx')) in (Array.update (arr, !i, v); i := (!i + 1); true) end) (ra1,ra2);
+           Tensor.fromArray ((#shape sl1), arr)
+        end
+
+        fun foldl f init (slice: 'a slice) = 
+        let
+           val te     = #tensor slice
+           val ra     = #range slice
+           val ax     = ref init
+        in 
+           Range.iteri (fn (ndx) => let val ax' = f (Tensor.sub (te,ndx),!ax) in ((ax := ax'); true) end) ra;
+           !ax
+        end
 
     end                                
 
@@ -1883,7 +1983,7 @@ structure MonoTensor  =
             end
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
-      fun cat (dim, x: tensor, y: tensor) =
+      fun cat (x: tensor, y: tensor, dim) =
         (let val xshape = (#shape x)
              val yshape = (#shape y)
              val xdata  = (#data x)
@@ -2149,6 +2249,7 @@ structure MonoTensor  =
             in  foldl accum Number.zero a
             end
     end (* NumberTensor *)
+
 structure RTensor =
     struct
         structure Number = RNumber
@@ -2185,7 +2286,7 @@ structure MonoTensor  =
             end
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
-      fun cat (dim, x: tensor, y: tensor) =
+      fun cat (x: tensor, y: tensor, dim) =
         (let val xshape = (#shape x)
              val yshape = (#shape y)
              val xdata  = (#data x)
@@ -2793,6 +2894,81 @@ structure MonoTensor  =
 end (* CTensor *)
 
 
+structure RTensorSlice =
+    struct
+        structure Tensor = RTensor
+        structure Index  = Tensor.Index
+        structure Array  = Tensor.Array
+        structure Range  = Range
+            
+        type index = Tensor.Index.t
+        type range = Range.t
+        type tensor = RTensor.tensor
+
+        type slice = {range : range, shape: index, tensor : tensor}
+
+        fun slice (rs,tensor) =
+            let val r = (Range.ranges (Tensor.shape tensor) rs)
+            in
+                {range=r,
+                 shape=(Range.shape r),
+                 tensor=tensor}
+            end
+
+        fun length ({range, shape, tensor}) = Range.length range
+        fun base ({range, shape, tensor}) = tensor
+        fun shape ({range, shape, tensor}) = Range.shape range
+
+        fun map f slice = 
+        let
+           val te  = #tensor slice
+           val ra  = #range slice
+           val fndx  = Range.first ra
+           val arr = Array.array(length(slice),f (Tensor.sub(te,fndx)))
+           val i   = ref 0
+        in 
+           Range.iteri (fn (ndx) => let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
+           RTensor.fromArray ((#shape slice), arr)
+        end
+
+        fun app f (slice: slice) = 
+        let
+           val te  = #tensor slice
+           val ra  = #range slice
+           val fndx  = Range.first ra
+        in 
+           Range.iteri (fn (ndx) => (f (Tensor.sub (te,ndx)); true)) ra; ()
+        end
+
+        fun map2 f (sl1: slice) (sl2: slice) = 
+        let
+           val _    = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
+           val te1  = #tensor sl1
+           val te2  = #tensor sl2
+           val ra1  = #range sl1
+           val ra2  = #range sl2
+           val fndx1  = Range.first ra1
+           val fndx2  = Range.first ra2
+           val arr   = Array.array(length(sl1),f (Tensor.sub(te1,fndx1),Tensor.sub(te2,fndx2)))
+           val i     = ref 0
+        in 
+           Range.iteri2 (fn (ndx,ndx') => let val v = f (Tensor.sub (te1,ndx),Tensor.sub (te2,ndx')) in (Array.update (arr, !i, v); i := (!i + 1); true) end) (ra1,ra2);
+           RTensor.fromArray ((#shape sl1), arr)
+        end
+
+        fun foldl f init (slice: slice) = 
+        let
+           val te     = #tensor slice
+           val ra     = #range slice
+           val ax     = ref init
+        in 
+           Range.iteri (fn (ndx) => let val ax' = f (Tensor.sub (te,ndx),!ax) in ((ax := ax'); true) end) ra;
+           !ax
+        end
+
+
+    end                                
+
 
 structure TensorFile =
 struct
@@ -2873,6 +3049,11 @@ fun listWrite converter file x =
     (intWrite file (length x);
      List.app (fn x => (linedOutput(file, converter x))) x)
 
+fun listLineWrite converter file x =
+    (List.app (fn x => (TextIO.output(file, " "^(converter x)))) x)
+
+fun intListLineWrite file x = (listLineWrite INumber.toString file x; TextIO.output(file, "\n"))
+
 fun intListWrite file x = listWrite INumber.toString file x
 fun realListWrite file x = listWrite RNumber.toString file x
 fun complexListWrite file x = listWrite CNumber.toString file x
@@ -2880,6 +3061,9 @@ fun complexListWrite file x = listWrite CNumber.toString file x
 fun intTensorWrite file x = (intListWrite file (ITensor.shape x); ITensor.app (fn x => (intWrite file x)) x)
 fun realTensorWrite file x = (intListWrite file (RTensor.shape x); RTensor.app (fn x => (realWrite file x)) x)
 fun complexTensorWrite file x = (intListWrite file (CTensor.shape x); CTensor.app (fn x => (complexWrite file x)) x)
+
+fun realTensorSliceWrite file x = (intListWrite file (RTensorSlice.shape x); RTensorSlice.app (fn x => (realWrite file x)) x)
+
 end
 
 
@@ -2914,12 +3098,66 @@ end
 (*
 val N1 = 8000
 val N2 = 2000
+val N =  N1+N2
 
+val S0  = RTensor.fromList ([2,2],[1.0,2.0,3.0,4.0])
+val _ = (print "S0 = "; TensorFile.realTensorWrite (TextIO.stdOut) S0)
+val v = RTensor.sub (S0,[0,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S0,[0,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S0,[1,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S0,[1,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
 
-val S  = RTensor.cat (1, 
-                      (RTensor.*> 0.5 (RandomTensor.realRandomTensor (13,17) [(N1+N2),N1]) ),
-                      (RTensor.~ (RandomTensor.realRandomTensor (19,23) [(N1+N2),N2])))
+val SN1 = (RTensor.*> 0.5 (RandomTensor.realRandomTensor (13,17) [N,N1]) )
+val SN2 = (RTensor.~ (RandomTensor.realRandomTensor (19,23) [N,N2]))
 
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN1
+
+val v = RTensor.sub (SN1,[0,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (SN1,[0,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (SN1,[1,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (SN1,[1,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (SN1,[2,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (SN1,[2,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+
+val S  = RTensor.cat (SN1, SN2, 1)
 val _ = TensorFile.realTensorWrite (TextIO.stdOut) S
-*)
 
+val v = RTensor.sub (S,[0,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[0,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[0,2])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,2])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[2,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[2,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[2,2])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+
+val S1 = RTensorSlice.slice ([([0,0],[N-1,0])],S)
+val S2 = RTensorSlice.slice ([([0,1],[N-1,1])],S)
+val S3 = RTensorSlice.slice ([([0,2],[N-1,2])],S)
+
+val _ = TensorFile.realTensorSliceWrite (TextIO.stdOut) S1
+val _ = TensorFile.realTensorSliceWrite (TextIO.stdOut) S2
+val _ = TensorFile.realTensorSliceWrite (TextIO.stdOut) S3
+
+
+*)

@@ -697,17 +697,21 @@ struct
 	   all the indices in the range, *)
 	fun iteri f RangeEmpty = f []
 	  | iteri (f: index -> bool) (RangeIn(shape,lo: index,up: index)) = 
-           (build_iterator lo up) [] f
+           (* TODO: add parameter for  row major / col major iteration over indices *)
+           (build_iterator (List.rev lo) (List.rev up)) [] f
 	  | iteri (f: index -> bool) (RangeSet(shape,set)) = 
-           List.all (fn (lo,up) => (build_iterator lo up) [] f) set
+           (* TODO: add parameter for  row major / col major iteration over indices *)
+           List.all (fn (lo,up) => ((build_iterator (List.rev lo) (List.rev up)) [] f)) set
 
 	(* Builds an interator that applies 'f' sequentially to
 	   all the indices of the two ranges, *)
 	fun iteri2 f (RangeEmpty,RangeEmpty) = f ([],[])
 	  | iteri2 (f: index * index -> bool) (RangeIn(shape,lo: index,up: index),RangeIn(shape',lo': index,up': index)) = 
-            if shape=shape' then (build_iterator2 lo up lo' up') [] [] f else raise Range
+           (* TODO: add parameter for  row major / col major iteration over indices *)
+            if shape=shape' then (build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f else raise Range
 	  | iteri2 (f: index * index -> bool) (RangeSet(shape,set),RangeSet(shape',set')) = 
-           if shape=shape' then ListPair.all (fn ((lo,up),(lo',up')) => (build_iterator2 lo up lo' up') [] [] f) (set,set') else raise Range
+           (* TODO: add parameter for  row major / col major iteration over indices *)
+           if shape=shape' then ListPair.all (fn ((lo,up),(lo',up')) => (build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f) (set,set') else raise Range
 
     end
 end
@@ -2926,13 +2930,15 @@ structure RTensorSlice =
 
         fun map f slice = 
         let
-           val te  = #tensor slice
-           val ra  = #range slice
+           val te    = #tensor slice
+           val ra    = #range slice
            val fndx  = Range.first ra
-           val arr = Array.array(length(slice),f (Tensor.sub(te,fndx)))
-           val i   = ref 0
+           val arr   = Array.array(length(slice),f (Tensor.sub(te,fndx)))
+           val i     = ref 0
         in 
-           Range.iteri (fn (ndx) => let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
+           
+           Range.iteri (fn (ndx) => 
+                         let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
            RTensor.fromArray ((#shape slice), arr)
         end
 

@@ -3100,23 +3100,13 @@ fun intRandomTensor (xseed,yseed) shape =
 
 end
 
-(*
 
-val S0  = RTensor.fromList ([2,2],[1.0,2.0,3.0,4.0])
-val _ = (print "S0 = "; TensorFile.realTensorWrite (TextIO.stdOut) S0)
-val v = RTensor.sub (S0,[0,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S0,[0,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S0,[1,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S0,[1,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+(*
 
 val N1 = 8
 val N2 = 2
 val N3 = 10
-val N =  N1+N2+N3
+val N =  N1+N2
 
 val SN1 = (RTensor.*> 0.5 (RandomTensor.realRandomTensor (13,17) [N,N1]) )
 val SN2 = (RTensor.~ (RandomTensor.realRandomTensor (19,23) [N,N2]))
@@ -3132,6 +3122,17 @@ val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN3
 
 val SN'  = RTensor.cat (SN, SN3, 1)
 val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN'
+
+val S0  = RTensor.fromList ([2,2],[1.0,2.0,3.0,4.0])
+val _ = (print "S0 = "; TensorFile.realTensorWrite (TextIO.stdOut) S0)
+val v = RTensor.sub (S0,[0,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S0,[0,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S0,[1,0])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S0,[1,1])
+val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
 
 val v = RTensor.sub (SN1,[0,0])
 val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)

@@ -860,31 +860,6 @@ structure Tensor : TENSOR =
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
 
-      fun cat (x: 'a tensor, y: 'a tensor, dim) =
-        (let val xshape = (#shape x)
-             val yshape = (#shape y)
-             val xdata  = (#data x)
-             val ydata  = (#data y)
-        in
-           if  not (length xshape  = length yshape) then
-           raise Shape
-           else
-                let 
-                   val (_,newshape)   = ListPair.foldl
-                                      (fn (x,y,(i,ax)) => if (dim = i) then (i+1,(x+y) :: ax) 
-                                                                       else if not (x=y) then raise Shape else (i+1,x :: ax))
-                                       (0,[]) (xshape, yshape)
-                   val newlength  = Index.length newshape 
-                   val newdata    = Array.array(newlength,Array.sub(xdata,0))
-                in
-                    Array.copy {src=xdata,dst=newdata,di=0};
-                    Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
-                    {shape = newshape,
-                     indexer = Index.indexer newshape,
-                     data = newdata}
-                end
-        end)
-
         fun new (shape, init) =
             if not (Index.validShape shape) then
                 raise Shape
@@ -934,6 +909,31 @@ structure Tensor : TENSOR =
                 end
             else
                 raise Shape
+
+      fun cat (x: 'a tensor, y: 'a tensor, dim) =
+        (let val xshape = (#shape x)
+             val yshape = (#shape y)
+             val xdata  = (#data x)
+             val ydata  = (#data y)
+        in
+           if  not (rank x  = rank y) then
+           raise Shape
+           else
+                let 
+                   val (_,newshape)   = ListPair.foldr
+                                      (fn (x,y,(i,ax)) => if (dim = i) then (i-1,(x+y) :: ax) 
+                                                                       else if not (x=y) then raise Shape else (i-1,x :: ax))
+                                       ((rank x)-1,[]) (xshape, yshape)
+                   val newlength  = Index.length newshape 
+                   val newdata    = Array.array(newlength,Array.sub(xdata,0))
+                in
+                    Array.copy {src=xdata,dst=newdata,di=0};
+                    Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
+                    {shape = newshape,
+                     indexer = Index.indexer newshape,
+                     data = newdata}
+                end
+        end)
 
         (*----- ELEMENTWISE OPERATIONS -----*)
 
@@ -1983,30 +1983,6 @@ structure MonoTensor  =
             end
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
-      fun cat (x: tensor, y: tensor, dim) =
-        (let val xshape = (#shape x)
-             val yshape = (#shape y)
-             val xdata  = (#data x)
-             val ydata  = (#data y)
-        in
-           if  not (length xshape  = length yshape) then
-           raise Shape
-           else
-                let 
-                   val (_,newshape)   = ListPair.foldl
-                                      (fn (x,y,(i,ax)) => if (dim = i) then (i+1,(x+y) :: ax) 
-                                                                       else if not (x=y) then raise Shape else (i+1,x :: ax))
-                                       (0,[]) (xshape, yshape)
-                   val newlength  = Index.length newshape 
-                   val newdata    = Array.array(newlength,Array.sub(xdata,0))
-                in
-                    Array.copy {src=xdata,dst=newdata,di=0};
-                    Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
-                    {shape = newshape,
-                     indexer = Index.indexer newshape,
-                     data = newdata}
-                end
-        end)
 
         fun new (shape, init) =
             if not (Index.validShape shape) then
@@ -2048,6 +2024,32 @@ structure MonoTensor  =
                 end
             else
                 raise Shape
+
+      fun cat (x: tensor, y: tensor, dim) =
+        (let val xshape = (#shape x)
+             val yshape = (#shape y)
+             val xdata  = (#data x)
+             val ydata  = (#data y)
+        in
+           if  not (rank x  = rank y) then
+           raise Shape
+           else
+                let 
+                   val (_,newshape)   = ListPair.foldr
+                                      (fn (x,y,(i,ax)) => if (dim = i) then (i-1,(x+y) :: ax) 
+                                                                       else if not (x=y) then raise Shape else (i-1,x :: ax))
+                                       ((rank x)-1,[]) (xshape, yshape)
+                   val newlength  = Index.length newshape 
+                   val newdata    = Array.array(newlength,Array.sub(xdata,0))
+                in
+                    Array.copy {src=xdata,dst=newdata,di=0};
+                    Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
+                    {shape = newshape,
+                     indexer = Index.indexer newshape,
+                     data = newdata}
+                end
+        end)
+
         (*----- ELEMENTWISE OPERATIONS -----*)
         fun sub (t, index) = Array.sub(#data t, toInt t index)
         fun update (t, index, value) =
@@ -2286,30 +2288,6 @@ structure MonoTensor  =
             end
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
-      fun cat (x: tensor, y: tensor, dim) =
-        (let val xshape = (#shape x)
-             val yshape = (#shape y)
-             val xdata  = (#data x)
-             val ydata  = (#data y)
-        in
-           if  not (length xshape  = length yshape) then
-           raise Shape
-           else
-                let 
-                   val (_,newshape)   = ListPair.foldl
-                                      (fn (x,y,(i,ax)) => if (dim = i) then (i+1,(x+y) :: ax) 
-                                                                       else if not (x=y) then raise Shape else (i+1,x :: ax))
-                                       (0,[]) (xshape, yshape)
-                   val newlength  = Index.length newshape 
-                   val newdata    = Array.array(newlength,Array.sub(xdata,0))
-                in
-                    Array.copy {src=xdata,dst=newdata,di=0};
-                    Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
-                    {shape = newshape,
-                     indexer = Index.indexer newshape,
-                     data = newdata}
-                end
-        end)
 
         fun new (shape, init) =
             if not (Index.validShape shape) then
@@ -2351,6 +2329,33 @@ structure MonoTensor  =
                 end
             else
                 raise Shape
+
+      fun cat (x: tensor, y: tensor, dim) =
+        (let val xshape = (#shape x)
+             val yshape = (#shape y)
+             val xdata  = (#data x)
+             val ydata  = (#data y)
+        in
+           if  not (rank x  = rank y) then
+           raise Shape
+           else
+                let 
+                   val (_,newshape)   = ListPair.foldr
+                                      (fn (x,y,(i,ax)) => if (dim = i) then (i-1,(x+y) :: ax) 
+                                                                       else if not (x=y) then raise Shape else (i-1,x :: ax))
+                                       ((rank x)-1,[]) (xshape, yshape)
+                   val newlength  = Index.length newshape 
+                   val newdata    = Array.array(newlength,Array.sub(xdata,0))
+                in
+                    Array.copy {src=xdata,dst=newdata,di=0};
+                    Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
+                    {shape = newshape,
+                     indexer = Index.indexer newshape,
+                     data = newdata}
+                end
+        end)
+
+
         (*----- ELEMENTWISE OPERATIONS -----*)
         fun sub (t, index) = Array.sub(#data t, toInt t index)
         fun update (t, index, value) =
@@ -3096,9 +3101,6 @@ fun intRandomTensor (xseed,yseed) shape =
 end
 
 (*
-val N1 = 8000
-val N2 = 2000
-val N =  N1+N2
 
 val S0  = RTensor.fromList ([2,2],[1.0,2.0,3.0,4.0])
 val _ = (print "S0 = "; TensorFile.realTensorWrite (TextIO.stdOut) S0)
@@ -3111,10 +3113,25 @@ val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
 val v = RTensor.sub (S0,[1,1])
 val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
 
+val N1 = 8
+val N2 = 2
+val N3 = 10
+val N =  N1+N2+N3
+
 val SN1 = (RTensor.*> 0.5 (RandomTensor.realRandomTensor (13,17) [N,N1]) )
 val SN2 = (RTensor.~ (RandomTensor.realRandomTensor (19,23) [N,N2]))
 
 val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN1
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN2
+
+val SN  = RTensor.cat (SN1, SN2, 1)
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN
+
+val SN3 = RTensor.new ([N,N3],10.0)
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN3
+
+val SN'  = RTensor.cat (SN, SN3, 1)
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN'
 
 val v = RTensor.sub (SN1,[0,0])
 val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)

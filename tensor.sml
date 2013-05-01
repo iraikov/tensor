@@ -3059,23 +3059,30 @@ fun complexTensorRead file =
     end
 
 (* ------------------ OUTPUT -------------------- *)
-fun linedOutput(file, x) = (TextIO.output(file, x); TextIO.output(file, "\n"))
+fun putStrLn (file, str) = 
+    (TextIO.output (file, str);
+     TextIO.output (file, "\n"))
+    
+fun putStr (file, str) = 
+    (TextIO.output (file, str))
 
-fun intWrite file x = linedOutput(file, INumber.toString x)
-fun realWrite file x = linedOutput(file, RNumber.toString x)
+fun intWrite file x = putStrLn(file, INumber.toString x)
+fun realWrite file x = putStrLn(file, RNumber.toString x)
 fun complexWrite file x =
     let val (r,i) = CNumber.split x
-    in linedOutput(file, concat [RNumber.toString r, " ", RNumber.toString i])
+    in putStrLn(file, concat [RNumber.toString r, " ", RNumber.toString i])
     end
 
 fun listWrite converter file x =
     (intWrite file (length x);
-     List.app (fn x => (linedOutput(file, converter x))) x)
+     List.app (fn x => (putStrLn(file, converter x))) x)
 
 fun listLineWrite converter file x =
     (List.app (fn x => (TextIO.output(file, " "^(converter x)))) x)
 
 fun intListLineWrite file x = (listLineWrite INumber.toString file x; TextIO.output(file, "\n"))
+fun realListLineWrite file x = (listLineWrite RNumber.toString file x; TextIO.output(file, "\n"))
+fun complexListLineWrite file x = (listLineWrite CNumber.toString file x; TextIO.output(file, "\n"))
 
 fun intListWrite file x = listWrite INumber.toString file x
 fun realListWrite file x = listWrite RNumber.toString file x
@@ -3085,7 +3092,18 @@ fun intTensorWrite file x = (intListWrite file (ITensor.shape x); ITensor.app (f
 fun realTensorWrite file x = (intListWrite file (RTensor.shape x); RTensor.app (fn x => (realWrite file x)) x)
 fun complexTensorWrite file x = (intListWrite file (CTensor.shape x); CTensor.app (fn x => (complexWrite file x)) x)
 
-fun realTensorSliceWrite file x = (intListWrite file (RTensorSlice.shape x); RTensorSlice.app (fn x => (realWrite file x)) x)
+fun intTensorLineWrite file x = (TextIO.output (file, "["); listLineWrite INumber.toString file (ITensor.shape x); TextIO.output (file, " ]"); 
+                                  ITensor.app (fn x => (TextIO.output (file, (" " ^ (INumber.toString x))))) x)
+fun realTensorLineWrite file x = (TextIO.output (file, "["); listLineWrite INumber.toString file (RTensor.shape x); TextIO.output (file, " ]"); 
+                                  RTensor.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x)
+fun complexTensorLineWrite file x = (TextIO.output (file, "["); listLineWrite INumber.toString file (CTensor.shape x); TextIO.output (file, " ]"); 
+                                     CTensor.app (fn x => (TextIO.output (file, (" " ^ (CNumber.toString x))))) x)
+
+fun realTensorSliceWrite file x = 
+    (intListWrite file (RTensorSlice.shape x); RTensorSlice.app (fn x => (realWrite file x)) x)
+fun realTensorSliceLineWrite file x = 
+    (TextIO.output (file, "["); listLineWrite INumber.toString file (RTensorSlice.shape x); TextIO.output (file, " ]"); 
+     RTensorSlice.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x)
 
 end
 

@@ -3111,26 +3111,18 @@ end
 structure RandomTensor =
 struct
 
-fun realRandomTensor (xseed,yseed) shape =
+fun realRandomTensor randarray shape =
     let 
         val length = Index.length shape
-        val seed   = Random.rand (xseed,yseed)
-        val a      = RTensor.Array.array(length, Random.randReal seed)
-        fun loop 0 = RTensor.fromArray(shape, a)
-          | loop j = (RTensor.Array.update(a, length-j, Random.randReal seed);
-                      loop (j-1))
-    in loop (length - 1)
+    in
+       RTensor.fromArray (randarray length)
     end
 
-fun intRandomTensor (xseed,yseed) shape =
+fun intRandomTensor randarray shape =
     let 
         val length = Index.length shape
-        val seed   = Random.rand (xseed,yseed)
-        val a      = ITensor.Array.array(length, Random.randInt seed)
-        fun loop 0 = ITensor.fromArray(shape, a)
-          | loop j = (ITensor.Array.update(a, length-j, Random.randInt seed);
-                      loop (j-1))
-    in loop (length - 1)
+    in
+       RTensor.fromArray (randarray length)
     end
 
 

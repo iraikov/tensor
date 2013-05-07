@@ -3115,14 +3115,14 @@ fun realRandomTensor randarray shape =
     let 
         val length = Index.length shape
     in
-       RTensor.fromArray (randarray length)
+       RTensor.fromArray (shape, randarray length)
     end
 
 fun intRandomTensor randarray shape =
     let 
         val length = Index.length shape
     in
-       RTensor.fromArray (randarray length)
+       RTensor.fromArray (shape, randarray length)
     end
 
 

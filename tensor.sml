@@ -3108,26 +3108,6 @@ fun realTensorSliceLineWrite file x =
 end
 
 
-structure RandomTensor =
-struct
-
-fun realRandomTensor randarray shape =
-    let 
-        val length = Index.length shape
-    in
-       RTensor.fromArray (shape, randarray length)
-    end
-
-fun intRandomTensor randarray shape =
-    let 
-        val length = Index.length shape
-    in
-       RTensor.fromArray (shape, randarray length)
-    end
-
-
-end
-
 
 (*
 

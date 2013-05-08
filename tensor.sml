@@ -269,12 +269,15 @@ structure Index : INDEX =
 		in f end
 	  | doindexer shape memo =
 		let fun f [] [] accum [] = accum
-		      | f _  _  _ [] = raise Index
 		      | f (fact::rf) (ndx::ri) accum (dim::rd) =
-			if (ndx >= 0) andalso (ndx < dim) then
-			    f rf ri (accum + ndx * fact) rd
-			else
-			    raise Index
+			(if (ndx >= 0) andalso (ndx < dim) then
+			     f rf ri (accum + ndx * fact) rd
+			 else
+			     raise Index)
+                      | f _ [] _ _  = raise Index
+                      | f [] _ _ _  = raise Index
+                      | f _ _ _ []  = raise Index
+
 		in f shape memo 0
 		end
     in
@@ -367,6 +370,7 @@ structure Index : INDEX =
 	    in loop
 	    end
 	  | build_iterator (a::rest) = iterator a (build_iterator rest)
+          | build_iterator [] = raise Shape
     in
 	fun all shape = build_iterator shape []
     end
@@ -401,6 +405,7 @@ structure Index : INDEX =
 	    in loop
 	    end
 	  | build_iterator (a::rest) = iterator a (build_iterator rest)
+          | build_iterator [] = raise Shape
     in
 	fun any shape = build_iterator shape []
     end
@@ -427,6 +432,7 @@ structure Index : INDEX =
 	    in loop
 	    end
 	  | build_iterator (a::rest) = iterator a (build_iterator rest)
+          | build_iterator [] = raise Shape
     in
 	fun app shape = build_iterator shape []
     end
@@ -545,6 +551,8 @@ struct
             simple_loop a b
 	  | build_iterator (a::ra) (b::rb) =
 	    nested_loop (build_iterator ra rb) a b
+	  | build_iterator [] _ = raise Range
+	  | build_iterator _ [] = raise Range
 
 	fun simple_loop2 (first : int) (last : int) (first' : int) (last' : int) =
 	    let fun loop (ndx : index) (ndx' : index) (g: index * index -> bool) =
@@ -576,6 +584,10 @@ struct
             simple_loop2 a b a' b'
 	  | build_iterator2 (a::ra) (b::rb) (a'::ra') (b'::rb') =
 	    nested_loop2 (build_iterator2 ra rb ra' rb') a b a' b'
+	  | build_iterator2 _ _ _ [] = raise Range
+	  | build_iterator2 _ _ [] _ = raise Range
+	  | build_iterator2 _ [] _ _ = raise Range
+	  | build_iterator2 [] _ _ _ = raise Range
 
     in
 
@@ -640,6 +652,7 @@ struct
 	fun first RangeEmpty = raise Range
 	  | first (RangeIn(shape,lo,up)) = lo
 	  | first (RangeSet(shape,(lo,up)::_)) = lo
+	  | first (RangeSet(shape,[])) = raise Range
 
 	fun last RangeEmpty = raise Range
 	  | last (RangeIn(shape,lo,up)) = up
@@ -724,10 +737,11 @@ struct
                                                               (build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f) 
                                                           (set,set') ))
              else raise Range)
+	  | iteri2 f (_,_) = raise Range
+            
 
     end
 end
-
 
 (*
  TENSOR         - Signature -
@@ -872,6 +886,7 @@ structure Tensor : TENSOR =
                 else
                     loop ([],a,rest) (place - 1)
             end
+            | splitList ([], _) = ([],0,[])
 
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
@@ -1086,7 +1101,6 @@ structure TensorSlice : TENSOR_SLICE =
         end
 
     end                                
-
 
 (*
  MONO_TENSOR            - signature -
@@ -1997,6 +2011,7 @@ structure MonoTensor  =
                 else
                     loop ([],a,rest) (place - 1)
             end
+          | splitList ([], _) = ([],0,[])
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
 
@@ -2302,6 +2317,7 @@ structure MonoTensor  =
                 else
                     loop ([],a,rest) (place - 1)
             end
+          | splitList ([], _) = ([],0,[])
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
 
@@ -2634,6 +2650,7 @@ structure MonoTensor  =
                 else
                     loop ([],a,rest) (place - 1)
             end
+          | splitList ([], _) = ([],0,[])
     in
     (*----- STRUCTURAL OPERATIONS & QUERIES ------*)
         fun new (shape, init) =
@@ -3106,7 +3123,6 @@ fun realTensorSliceLineWrite file x =
      RTensorSlice.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x)
 
 end
-
 
 
 (*

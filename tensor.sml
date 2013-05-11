@@ -24,18 +24,6 @@ conditions are met:
    or promote products derived from this software without
    specific prior written permission.
 
-THIS SOFTWARE IS PROVIDED BY JUAN JOSE GARCIA RIPOLL ``AS IS''
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL HE BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
-OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
-TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
-OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
-OF SUCH DAMAGE.
 *)
 
 
@@ -122,7 +110,7 @@ structure Loop =
                 ColumnMajor => [0,0]>[1,0]>[0,1]>[1,1] (Fortran)
   last shape
   first shape
-        Returns the last/first index that belongs to the sed defined by
+        Returns the last/first index that belongs to the set defined by
         'shape'.
   inBounds shape index
         Checkes whether 'index' belongs to the set defined by 'shape'.
@@ -623,7 +611,10 @@ struct
         fun ranges shape xs = 
             let val set = ranges' shape xs
             in 
-                if List.null set then RangeEmpty else RangeSet (shape,set)
+                case set of
+                    []        => RangeEmpty
+                  | [(lo,up)] => RangeIn (shape,lo,up)
+                  | _         => RangeSet (shape,set)
             end
 
 	fun length RangeEmpty = 0
@@ -838,10 +829,13 @@ signature TENSOR_SLICE =
         type 'a tensor = 'a Tensor.tensor
         type 'a slice
 
+        val fromto : index * index * 'a tensor -> 'a slice
         val slice  : ((index * index) list) * 'a tensor -> 'a slice
+
         val length : 'a slice -> int
         val base   : 'a slice -> 'a tensor
         val shape  : 'a slice -> (index)
+        val range  : 'a slice -> (range)
 
         val app : ('a -> unit) -> 'a slice -> unit
         val map : ('a -> 'b) -> 'a slice -> 'b tensor
@@ -1041,6 +1035,14 @@ structure TensorSlice : TENSOR_SLICE =
 
         type 'a slice = {range : range, shape: index, tensor : 'a tensor}
 
+        fun fromto (lo,up,tensor) =
+            let val r = Range.fromto (Tensor.shape tensor) (lo,up)
+            in
+                {range=r,
+                 shape=(Range.shape r),
+                 tensor=tensor}
+            end
+
         fun slice (rs,tensor) =
             let val r = (Range.ranges (Tensor.shape tensor) rs)
             in
@@ -1052,6 +1054,7 @@ structure TensorSlice : TENSOR_SLICE =
         fun length ({range, shape, tensor}) = Range.length range
         fun base ({range, shape, tensor}) = tensor
         fun shape ({range, shape, tensor}) = Range.shape range
+        fun range ({range, shape, tensor}) = range
 
         fun map f slice = 
         let
@@ -2945,6 +2948,14 @@ structure RTensorSlice =
 
         type slice = {range : range, shape: index, tensor : tensor}
 
+        fun fromto (lo,up,tensor) =
+            let val r = Range.fromto (Tensor.shape tensor) (lo,up)
+            in
+                {range=r,
+                 shape=(Range.shape r),
+                 tensor=tensor}
+            end
+
         fun slice (rs,tensor) =
             let val r = (Range.ranges (Tensor.shape tensor) rs)
             in
@@ -2954,8 +2965,9 @@ structure RTensorSlice =
             end
 
         fun length ({range, shape, tensor}) = Range.length range
-        fun base ({range, shape, tensor}) = tensor
-        fun shape ({range, shape, tensor}) = Range.shape range
+        fun base ({range, shape, tensor})   = tensor
+        fun shape ({range, shape, tensor})  = Range.shape range
+        fun range ({range, shape, tensor})  = range
 
         fun map f slice = 
         let
@@ -3123,83 +3135,3 @@ fun realTensorSliceLineWrite file x =
      RTensorSlice.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x)
 
 end
-
-
-(*
-
-val N1 = 8
-val N2 = 2
-val N3 = 10
-val N =  N1+N2
-
-val SN1 = (RTensor.*> 0.5 (RandomTensor.realRandomTensor (13,17) [N,N1]) )
-val SN2 = (RTensor.~ (RandomTensor.realRandomTensor (19,23) [N,N2]))
-
-val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN1
-val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN2
-
-val SN  = RTensor.cat (SN1, SN2, 1)
-val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN
-
-val SN3 = RTensor.new ([N,N3],10.0)
-val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN3
-
-val SN'  = RTensor.cat (SN, SN3, 1)
-val _ = TensorFile.realTensorWrite (TextIO.stdOut) SN'
-
-val S0  = RTensor.fromList ([2,2],[1.0,2.0,3.0,4.0])
-val _ = (print "S0 = "; TensorFile.realTensorWrite (TextIO.stdOut) S0)
-val v = RTensor.sub (S0,[0,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S0,[0,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S0,[1,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S0,[1,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-
-val v = RTensor.sub (SN1,[0,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (SN1,[0,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (SN1,[1,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (SN1,[1,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (SN1,[2,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (SN1,[2,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-
-val S  = RTensor.cat (SN1, SN2, 1)
-val _ = TensorFile.realTensorWrite (TextIO.stdOut) S
-
-val v = RTensor.sub (S,[0,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[0,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[0,2])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[1,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[1,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[1,2])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[2,0])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[2,1])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = RTensor.sub (S,[2,2])
-val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
-
-val S1 = RTensorSlice.slice ([([0,0],[N-1,0])],S)
-val S2 = RTensorSlice.slice ([([0,1],[N-1,1])],S)
-val S3 = RTensorSlice.slice ([([0,2],[N-1,2])],S)
-
-val _ = TensorFile.realTensorSliceWrite (TextIO.stdOut) S1
-val _ = TensorFile.realTensorSliceWrite (TextIO.stdOut) S2
-val _ = TensorFile.realTensorSliceWrite (TextIO.stdOut) S3
-
-
-*)

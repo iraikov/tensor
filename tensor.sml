@@ -709,25 +709,31 @@ struct
                 Index.RowMajor => (List.all (fn (lo,up) => ((build_iterator lo up) [] f)) set)
               | Index.ColumnMajor => (List.all (fn (lo,up) => ((build_iterator (List.rev lo) (List.rev up)) [] f)) set))
 
+        fun putStrLn out str = 
+            (TextIO.output (out, str);
+             TextIO.output (out, "\n"))
+            
+
+        fun listLineWrite converter file x =
+            (List.app (fn x => (TextIO.output(file, " "^(converter x)))) x)
+            
+        fun intListLineWrite file x = (listLineWrite Int.toString file x; TextIO.output(file, "\n"))
+            
 	(* Builds an interator that applies 'f' sequentially to
 	   all the indices of the two ranges, *)
 	fun iteri2 f (RangeEmpty,RangeEmpty) = f ([],[])
 	  | iteri2 (f: index * index -> bool) (RangeIn(shape,lo: index,up: index),RangeIn(shape',lo': index,up': index)) = 
-            (if shape=shape' 
-             then (case Index.order of
-                       Index.RowMajor => ((build_iterator2 lo up lo' up') [] [] f )
-                     | Index.ColumnMajor => ((build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f ))
-             else raise Range)
+            (case Index.order of
+                 Index.RowMajor => ((build_iterator2 lo up lo' up') [] [] f )
+               | Index.ColumnMajor => ((build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f ))
 	  | iteri2 (f: index * index -> bool) (RangeSet(shape,set),RangeSet(shape',set')) = 
-            (if shape=shape' 
-             then (case Index.order of
-                       Index.RowMajor => (ListPair.all (fn ((lo,up),(lo',up')) => 
-                                                           (build_iterator2 lo up lo' up') [] [] f)
-                                                       (set,set') )
-                     | Index.ColumnMajor => (ListPair.all (fn ((lo,up),(lo',up')) => 
-                                                              (build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f) 
-                                                          (set,set') ))
-             else raise Range)
+            (case Index.order of
+                 Index.RowMajor => (ListPair.all (fn ((lo,up),(lo',up')) => 
+                                                     (build_iterator2 lo up lo' up') [] [] f)
+                                                 (set,set') )
+               | Index.ColumnMajor => (ListPair.all (fn ((lo,up),(lo',up')) => 
+                                                        (build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f) 
+                                                    (set,set') ))
 	  | iteri2 f (_,_) = raise Range
             
 
@@ -1079,17 +1085,22 @@ structure TensorSlice : TENSOR_SLICE =
 
         fun map2 f (sl1: 'a slice) (sl2: 'b slice) = 
         let
-           val _    = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
-           val te1  = #tensor sl1
-           val te2  = #tensor sl2
-           val ra1  = #range sl1
-           val ra2  = #range sl2
+           val _      = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
+           val te1    = #tensor sl1
+           val te2    = #tensor sl2
+           val ra1    = #range sl1
+           val ra2    = #range sl2
            val fndx1  = Range.first ra1
            val fndx2  = Range.first ra2
-           val arr   = Array.array(length(sl1),f (Tensor.sub(te1,fndx1),Tensor.sub(te2,fndx2)))
-           val i     = ref 0
+           val arr    = Array.array(length(sl1),f (Tensor.sub(te1,fndx1),Tensor.sub(te2,fndx2)))
+           val i      = ref 0
         in 
-           Range.iteri2 (fn (ndx,ndx') => let val v = f (Tensor.sub (te1,ndx),Tensor.sub (te2,ndx')) in (Array.update (arr, !i, v); i := (!i + 1); true) end) (ra1,ra2);
+            Range.iteri2 (fn (ndx,ndx') => 
+                             let 
+                                 val v = f (Tensor.sub (te1,ndx),Tensor.sub (te2,ndx')) 
+                             in 
+                                 (Array.update (arr, !i, v); i := (!i + 1); true) 
+                             end) (ra1,ra2);
            Tensor.fromArray ((#shape sl1), arr)
         end
 
@@ -2994,17 +3005,23 @@ structure RTensorSlice =
 
         fun map2 f (sl1: slice) (sl2: slice) = 
         let
-           val _    = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
-           val te1  = #tensor sl1
-           val te2  = #tensor sl2
-           val ra1  = #range sl1
-           val ra2  = #range sl2
+           val _      = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
+           val te1    = #tensor sl1
+           val te2    = #tensor sl2
+           val ra1    = #range sl1
+           val ra2    = #range sl2
            val fndx1  = Range.first ra1
            val fndx2  = Range.first ra2
-           val arr   = Array.array(length(sl1),f (Tensor.sub(te1,fndx1),Tensor.sub(te2,fndx2)))
-           val i     = ref 0
+           val arr    = Array.array (length(sl1), f (Tensor.sub(te1,fndx1), Tensor.sub(te2,fndx2)))
+           val i      = ref 0
         in 
-           Range.iteri2 (fn (ndx,ndx') => let val v = f (Tensor.sub (te1,ndx),Tensor.sub (te2,ndx')) in (Array.update (arr, !i, v); i := (!i + 1); true) end) (ra1,ra2);
+           Range.iteri2 (fn (ndx,ndx') => 
+                            let 
+                                val v = f (Tensor.sub (te1,ndx),Tensor.sub (te2,ndx')) 
+                            in 
+                                (Array.update (arr, !i, v); i := (!i + 1); true) 
+                            end)
+                        (ra1,ra2);
            RTensor.fromArray ((#shape sl1), arr)
         end
 

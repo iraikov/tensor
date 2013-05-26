@@ -260,8 +260,6 @@ struct
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
                     val update  = Unsafe.IntArray.update
-
-                                  
                 in
                     (Array.foldli (fn (n,rowlist,i) => 
                                       let 
@@ -270,6 +268,46 @@ struct
                                                                    update (indices,i,colind); 
                                                                    i+1))
                                                               i rowlist
+                                      in
+                                          (update (indptr,n,i); i')
+                                      end)
+                                  0 data;
+                     {shape=shape, nz={ indptr= indptr, indices=indices }, data=data'}
+                     )
+                end
+              | CSC =>
+                let 
+                    val v0: (int * elem) list = []
+	            val data: ((int * elem) list) Array.array  = Array.array(cols,v0)
+                    val nzcount = ref 0
+                    val _ = RTensor.Index.app shape
+                                              (fn (i) => 
+                                                  let 
+                                                      val v = Tensor.sub (a, i)
+                                                  in
+                                                      if not (Number.== (v, Number.zero))
+                                                      then
+                                                          let val [irow,icol] = i
+                                                              val col  = Array.sub (data, icol)
+                                                              val col' = (irow,v) :: col
+                                                          in
+                                                              Array.update(data,icol,col');
+                                                              nzcount := (!nzcount) + 1
+                                                          end
+                                                      else ()
+                                                  end)
+                    val data'   = Array.array (!nzcount, Number.zero)
+                    val indices = IntArray.array (!nzcount, 0)
+                    val indptr  = IntArray.array (cols, 0)
+                    val update  = Unsafe.IntArray.update
+                in
+                    (Array.foldli (fn (n,collist,i) => 
+                                      let 
+                                          val i' = List.foldl (fn ((rowind,v),i) => 
+                                                                  (Array.update (data',i,v); 
+                                                                   update (indices,i,rowind); 
+                                                                   i+1))
+                                                              i collist
                                       in
                                           (update (indptr,n,i); i')
                                       end)

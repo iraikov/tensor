@@ -32,15 +32,15 @@ conditions are met:
 signature SPARSE_INDEX =
     sig
         type t
-        type nonzero = { indptr: int Vector.vector, indices: int Vector.vector }
+        type nonzero = { indptr: IntArray.array, indices: IntArray.array }
 	type indexer = t -> int option
-        datatype storage = CRS | CCS
+        datatype storage = CSR | CSC
 
         exception Index
         exception Shape
 
         val order : storage
-        val toInt : t -> t -> int
+        val toInt : t -> nonzero -> t -> int option
 
         val inBounds : t -> t -> bool
 
@@ -62,13 +62,8 @@ signature SPARSE_INDEX =
  structure Tensor : MONO_TENSOR
 	Tensors of 'elem' type.
 
- fromList [[number,number,...]*]
-	Builds a sparse matrix up from a lists of lists of numbers
-	(i.e. a matrix in list format and in column major order)
-
- rows matrix
- cols matrix
-	Return the dimensions of the matrix
+ fromTensor [[number,number,...]*]
+	Builds a sparse matrix up from a tensor
 
  sub (matrix,row,column)
  update (matrix,row,column,value)
@@ -92,23 +87,21 @@ signature SPARSE_INDEX =
 
 signature MONO_SPARSE =
     sig
-	structure Tensor : NUMBER_TENSOR
+	structure Tensor : MONO_TENSOR
 	structure Number : NUMBER
 	structure Index : SPARSE_INDEX
 
-        type index = Index.index
+        type index = Index.t
 	type elem = Number.t
 	type matrix
 
-	exception Data
-	and Shape
+	exception Data and Shape
 
-	val fromArray : (int array, int array, elem array) -> matrix
-	val full : matrix -> Tensor.tensor
+	val fromTensor : Tensor.tensor -> matrix
 
 	val sub : matrix * index -> elem
 	val update : matrix * index * elem -> unit
-
+(*
 	val map : (elem -> elem) -> matrix -> matrix
 	val map2 : (elem * elem -> elem) -> matrix -> matrix -> matrix
 	val mapi : (index * elem -> elem) -> matrix -> matrix
@@ -120,8 +113,7 @@ signature MONO_SPARSE =
 	val * : matrix * matrix -> matrix
 	val / : matrix * matrix -> matrix
 	val ~ : matrix -> matrix
-
-	val print : matrix -> unit
+*)
     end
 
 
@@ -129,17 +121,15 @@ signature MONO_SPARSE =
 structure SparseIndex =
     struct
 
-        structure Vector = Vector
-
 	type t = int list
-        type nonzero = { indptr: int Vector.vector, indices: int Vector.vector }
+        type nonzero = { indptr: IntArray.array, indices: IntArray.array }
 	type indexer = t -> int option
-        datatype storage = CRS | CCS
+        datatype storage = CSR | CSC
                             
 	exception Index
 	exception Shape
 
-	val order = CCS
+	val order = CSC
 
 	fun validShape shape = List.all (fn x => x > 0) shape
 	fun validIndex index = List.all (fn x => x >= 0) index
@@ -150,7 +140,7 @@ structure SparseIndex =
         fun findFromTo (i,v,s,e) =
             let fun loop (j) = 
                     if ((j >= s) andalso (j < e)) 
-                    then (if (Vector.sub (v,j) = i) then SOME j else loop (j+1))
+                    then (if (sub (v,j) = i) then SOME j else loop (j+1))
                     else NONE
             in
                 loop s
@@ -158,18 +148,18 @@ structure SparseIndex =
 
 
 	fun toInt shape {indptr, indices} index  =
-            let val nptr = Vector.length indptr
-                val nind = Vector.length indices
+            let val nptr = IntArray.length indptr
+                val nind = IntArray.length indices
             in
                 case order of 
-                    CCS => 
+                    CSC => 
                     (case (index, shape) of
                          ([i,j],[s,rs]) => 
                          if (i >= 0) andalso (i < s) 
                          then
                              (let
-                                  val s = Vector.sub (indptr,j)
-                                  val e = if (i < nptr) then Vector.sub (indptr,i+1) else nind
+                                  val s = sub (indptr,j)
+                                  val e = if (i < nptr) then sub (indptr,i+1) else nind
                                   val n = findFromTo (i, indices, s, e)
                               in 
                                   case n of 
@@ -179,14 +169,14 @@ structure SparseIndex =
                          else raise Index
                        | ([],[]) => SOME 0
                        | (_,_)   => raise Index)
-                  | CRS => 
+                  | CSR => 
                     (case (index, shape) of
                          ([i,j],[s,rs]) => 
                          if (i >= 0) andalso (i < s) 
                          then
                              (let
-                                  val s = Vector.sub (indptr,i)
-                                  val e = if (i < nptr) then Vector.sub (indptr,i+1) else nind
+                                  val s = sub (indptr,i)
+                                  val e = if (i < nptr) then sub (indptr,i+1) else nind
                                   val n = findFromTo (j, indices, s, e)
                               in
                                   case n of
@@ -208,17 +198,17 @@ structure SparseIndex =
 
 
 
-structure SparseMatrix :> MONO_SPARSE
-    where type Tensor.Number.t = RealTensor.Number.t
-	  and type Tensor.tensor = RealTensor.tensor =
-struct
-    structure Tensor : NUMBER_TENSOR = RealTensor
-    structure Number = RealTensor.Number
+structure SparseMatrix : MONO_SPARSE =
 
+struct
+    structure Tensor : MONO_TENSOR = RTensor
+    structure Number = RTensor.Number
     structure Index = SparseIndex
 
-    type elem = Number.t
-    type matrix = {nz: Index.nonzero, data: elem array}
+    type index   = Index.t
+    type nonzero = Index.nonzero
+    type elem    = Number.t
+    type matrix  = {shape: index, nz: nonzero, data: elem array}
 
     exception Data
     exception Shape
@@ -240,26 +230,69 @@ struct
 
     (* --- CONSTRUCTORS --- *)
 
-    fun fromArray (i,j,a) = 
-        if (not ( ((Array.length a) = (Array.length i)) andalso
-                  ((Array.length a) = (Array.length j))))
-        then raise Data
-        else (case Index.order of
-                  Index.CRS =>
+    fun fromTensor (a: Tensor.tensor) = 
+        (let 
+            val shape as [rows,cols] = Tensor.shape a
+        in
+            case Index.order of
+                Index.CSR => 
+                let 
+                    val v0: (int * elem) list = []
+	            val data: ((int * elem) list) Array.array  = Array.array(rows,v0)
+                    val nzcount = ref 0
+                    val _ = RTensor.Index.app shape
+                                              (fn (i) => 
+                                                  let 
+                                                      val v = Tensor.sub (a, i)
+                                                  in
+                                                      if not (Number.== (v, Number.zero))
+                                                      then
+                                                          let val [irow,icol] = i
+                                                              val row  = Array.sub (data, irow)
+                                                              val row' = (icol,v) :: row
+                                                          in
+                                                              Array.update(data,irow,row');
+                                                              nzcount := (!nzcount) + 1
+                                                          end
+                                                      else ()
+                                                  end)
+                    val data'   = Array.array (!nzcount, Number.zero)
+                    val indices = IntArray.array (!nzcount, 0)
+                    val indptr  = IntArray.array (rows, 0)
+                    val update  = Unsafe.IntArray.update
+
+                                  
+                in
+                    (Array.foldli (fn (n,rowlist,i) => 
+                                      let 
+                                          val i' = List.foldl (fn ((colind,v),i) => 
+                                                                  (Array.update (data',i,v); 
+                                                                   update (indices,i,colind); 
+                                                                   i+1))
+                                                              i rowlist
+                                      in
+                                          (update (indptr,n,i); i')
+                                      end)
+                                  0 data;
+                     {shape=shape, nz={ indptr= indptr, indices=indices }, data=data'}
+                     )
+                end
+        end)
+                  
 
     (* --- ACCESSORS --- *)
 
 
-    fun sub ({shape, nz, data},[i,j] as index) =
-        case Index.toInt shape nz [i,j] of
-                 SOME n => Array.sub (data, n)
-               | NONE => Number.zero
+    fun sub ({shape, nz, data},index as [i,j]) =
+        (case Index.toInt shape nz [i,j] of
+             SOME n => Array.sub (data, n)
+           | NONE => Number.zero)
 
 
-    fun update ({shape, nz, data},[i,j] as index,new) =
-        case Index.toInt shape nz [i,j] of
-                 SOME n => Array.update (data, n, new)
-               | NONE => raise Data
+    fun update ({shape, nz, data},index as [i,j],new) =
+        (case Index.toInt shape nz [i,j] of
+             SOME n => Array.update (data, n, new)
+           | NONE => raise Data)
 
 
     (* --- MAPPING --- *)
@@ -268,93 +301,18 @@ struct
         {shape=shape, nz=nz, data=array_map f data}
 
 
-    fun mapi f {rows,cols,data} =
-	let fun for_row (row_ndx,row) =
-	    let fun for_item (col_ndx,x) =
-		(col_ndx, f(row_ndx,col_ndx,x))
-	    in
-		List.map for_item row
-	    end
-	in
-	    {rows=rows,cols=cols,data=array_mapi for_row data}
-	end
+    fun mapi f {shape, nz, data} =
+        {shape=shape, nz=nz, data=array_mapi f data}
 
-    fun map2 f {rows=rows1, cols=cols1, data=data1}
-	       {rows=rows2, cols=cols2, data=data2} =
-	let fun fcons (col,x,rest) =
-	        if Number.==(x,Number.zero) then rest else (col,x)::rest
-	    fun pair_map f [] [] = []
-	      | pair_map f ((col,x)::rest) [] =
-		fcons(col, f(x,Number.zero), pair_map f rest [])
-	      | pair_map f [] ((col,x)::rest) =
-		fcons(col, f(Number.zero,x), pair_map f [] rest)
-	      | pair_map f l1 l2 =
-		let val (c1,x1)::rest1 = l1
-		    val (c2,x2)::rest2 = l2
-		in
-		    if (c1 < c2) then
-			fcons(c1, f(x1,Number.zero), pair_map f rest1 l2)
-		    else if (c1 > c2) then
-			fcons(c2, f(Number.zero,x2), pair_map f l1 rest2)
-		    else
-			fcons(c1, f(x1,x2), pair_map f rest1 rest2)
-		end
-	    fun loop_rows row =
-		pair_map f (Array.sub(data1,row)) (Array.sub(data2,row))
-	in
-	    if (rows1 = rows2) andalso (rows2 = cols2) then
-		{rows=rows1, cols=cols1, data=Array.tabulate(rows1,loop_rows)}
-	    else
-		raise Match
-	end (* map2 *)
-	
-
-    fun app f {rows,cols,data} =
-	let fun for_item (_,value) = f value
-	    fun for_row row = List.app for_item row in
-	    Array.app for_row data
-	end
-
-    fun appi f {rows,cols,data} =
-	let fun for_row (row_ndx,row) =
-	    let fun for_item (col_ndx,x) =
-		f(row_ndx,col_ndx,x)
-	    in
-		List.app for_item row
-	    end
-	in
-	    Array.appi for_row (data,0,NONE)
-	end
-
-    fun full matrix =
-	let val {rows,cols,data} = matrix
-	    val c = Tensor.new([rows,cols],Number.zero)
-	    fun copy (row,col,value) = Tensor.update(c,[row,col],value)
-	in
-	    appi copy matrix;
-	    c
-	end
-
-    (* --- PRINTING --- *)
-    fun print m =
-	let val print = TextIO.print
-	    fun print_item (row,col,value) =
-	    (print "("; print (Int.toString row); print ",";
-	     print (Int.toString col); print ") = ";
-	     print (Number.toString value);
-	     print "\n")
-	in
-	    print "("; print (Int.toString (rows m));
-	    print ","; print (Int.toString (cols m)); print ")\n";
-	    appi print_item m
-	end
+    fun appi f {shape, nz, data} =
+        {shape=shape, nz=nz, data=Array.appi f data}
 
     (* --- BINOPS --- *)
-
+(*
     fun a + b = map2 Number.+ a b
     fun a * b = map2 Number.* a b
     fun a - b = map2 Number.- a b
     fun a / b = map2 Number./ a b
     fun ~ a = map Number.~ a
-
+*)
 end

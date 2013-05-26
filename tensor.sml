@@ -1207,7 +1207,7 @@ signature MONO_TENSOR =
         val map2 : (elem * elem -> elem) -> tensor -> tensor -> tensor
         val app : (elem -> unit) -> tensor -> unit
         val appi : (int * elem -> unit) -> tensor -> unit
-        val foldl : (elem * 'a -> 'a) -> 'a -> tensor -> tensor
+        val foldl : (elem * 'a -> 'a) -> 'a -> tensor -> 'a
         val foldln : (elem * elem -> elem) -> elem -> tensor -> int -> tensor
         val all : (elem -> bool) -> tensor -> bool
         val any : (elem -> bool) -> tensor -> bool
@@ -2432,6 +2432,7 @@ structure MonoTensor  =
                         f (Array.sub(a, i)))
             end
         fun foldl f init tensor = Array.foldl f init (toArray tensor)
+
         fun foldln f init {shape, indexer, data=a} index =
             let val (head,lk,tail) = splitList(shape, index)
                 val li = Index.length head

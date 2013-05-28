@@ -709,11 +709,6 @@ struct
                 Index.RowMajor => (List.all (fn (lo,up) => ((build_iterator lo up) [] f)) set)
               | Index.ColumnMajor => (List.all (fn (lo,up) => ((build_iterator (List.rev lo) (List.rev up)) [] f)) set))
 
-        fun putStrLn out str = 
-            (TextIO.output (out, str);
-             TextIO.output (out, "\n"))
-            
-
         fun listLineWrite converter file x =
             (List.app (fn x => (TextIO.output(file, " "^(converter x)))) x)
             

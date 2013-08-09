@@ -72,6 +72,16 @@ structure Loop =
             else
                 ()
 
+        fun app2 (a1, b1, a2, b2, f) =
+            if ((a1 < b1) andalso (a2 < b2)) then
+                (f (a1, a2); app2 (a1+1, b1, a2+1, b2, f))
+            else
+                if (a1 < b1)
+                then app (a1, b1, fn (a1) => f (a1,a2))
+                else (if (a2 < b2) 
+                      then app (a2, b2, fn (a2) => f (a1,a2))
+                      else ())
+
         fun app' (a, b, d, f) =
             if a < b then
                 (f a; app' (a+d, b, d, f))
@@ -812,7 +822,8 @@ signature TENSOR =
         val map2 : ('a * 'b -> 'c) -> 'a tensor -> 'b tensor -> 'c tensor
         val app : ('a -> unit) -> 'a tensor -> unit
         val appi : (int * 'a -> unit) -> 'a tensor -> unit
-        val foldl : ('c * 'a -> 'c) -> 'c -> 'a tensor -> int -> 'c tensor
+        val foldl : ('a * 'b -> 'b) -> 'b -> 'a tensor -> 'b
+        val foldln : ('c * 'a -> 'c) -> 'c -> 'a tensor -> int -> 'c tensor
         val all : ('a -> bool) -> 'a tensor -> bool
         val any : ('a -> bool) -> 'a tensor -> bool
 
@@ -1000,8 +1011,9 @@ structure Tensor : TENSOR =
             in Loop.any(0, length tensor - 1, fn i =>
                         f (Array.sub(a, i)))
             end
+        fun foldl f init tensor = Array.foldl f init (toArray tensor)
 
-        fun foldl f init {shape, indexer, data=a} index =
+        fun foldln f init {shape, indexer, data=a} index =
             let val (head,lk,tail) = splitList(shape, index)
                 val li = Index.length head
                 val lj = Index.length tail
@@ -2876,8 +2888,8 @@ structure MonoTensor  =
         fun *+ ta tb  =
             let val (rank_a,shape_a,a) = (rank ta, shape ta, toArray ta)
                 val (rank_b,shape_b,b) = (rank tb, shape tb, toArray tb)
-                val (lk::rest_a) = List.rev shape_a
-                val (lk2::rest_b) = List.rev shape_b
+                val (lk::rest_a) = (List.rev shape_a) 
+                val (lk2::rest_b) = (List.rev shape_b) 
             in
                 if not(lk = lk2) then
                     raise Match

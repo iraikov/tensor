@@ -828,6 +828,8 @@ signature TENSOR =
         val any : ('a -> bool) -> 'a tensor -> bool
 
         val cat :  'a tensor * 'a tensor * int -> 'a tensor        
+        val prepad : 'a tensor * int * 'a * int -> 'a tensor        
+        val postpad : 'a tensor * int * 'a * int -> 'a tensor        
     end
 
 
@@ -953,7 +955,7 @@ structure Tensor : TENSOR =
              val xdata  = (#data x)
              val ydata  = (#data y)
         in
-           if  not (rank x  = rank y) then
+           if  not (rank x  < rank y) then
            raise Shape
            else
                 let 
@@ -971,6 +973,45 @@ structure Tensor : TENSOR =
                      data = newdata}
                 end
         end)
+
+
+      fun prepad (x: 'a tensor, len, c, dim) =
+          (let val xshape = (#shape x)
+               val xdata  = (#data x)
+           in
+               if (rank x) <= dim then
+                   raise Shape
+               else
+                   let 
+                       val (_,newshape)   = List.foldr
+                                                (fn (x,(i,ax)) => 
+                                                    if (dim = i) then (i-1,len :: ax)
+                                                    else (i-1,x :: ax))
+                                                ((rank x)-1,[]) xshape
+                   in
+                       cat (new (newshape, c), x, dim)
+                   end
+           end)
+
+      fun postpad (x: 'a tensor, len, c, dim) =
+          (let val xshape = (#shape x)
+               val xdata  = (#data x)
+           in
+               if (rank x) <= dim then
+                   raise Shape
+               else
+                   let 
+                       val (_,newshape)   = List.foldr
+                                                (fn (x,(i,ax)) => 
+                                                    if (dim = i) then (i-1,len :: ax)
+                                                    else (i-1,x :: ax))
+                                                ((rank x)-1,[]) xshape
+                   in
+                       cat (x, new (newshape, c), dim)
+                   end
+           end)
+
+
 
         (*----- ELEMENTWISE OPERATIONS -----*)
 
@@ -2102,6 +2143,45 @@ structure MonoTensor  =
                 end
         end)
 
+
+      fun prepad (x: tensor, len, c, dim) =
+          (let val xshape = (#shape x)
+               val xdata  = (#data x)
+           in
+               if (rank x) <= dim then
+                   raise Shape
+               else
+                   let 
+                       val (_,newshape)   = List.foldr
+                                                (fn (x,(i,ax)) => 
+                                                    if (dim = i) then (i-1,len :: ax)
+                                                    else (i-1,x :: ax))
+                                                ((rank x)-1,[]) xshape
+                   in
+                       cat (new (newshape, c), x, dim)
+                   end
+           end)
+
+      fun postpad (x: tensor, len, c, dim) =
+          (let val xshape = (#shape x)
+               val xdata  = (#data x)
+           in
+               if (rank x) <= dim then
+                   raise Shape
+               else
+                   let 
+                       val (_,newshape)   = List.foldr
+                                                (fn (x,(i,ax)) => 
+                                                    if (dim = i) then (i-1,len :: ax)
+                                                    else (i-1,x :: ax))
+                                                ((rank x)-1,[]) xshape
+                   in
+                       cat (x, new (newshape, c), dim)
+                   end
+           end)
+
+
+
         (*----- ELEMENTWISE OPERATIONS -----*)
         fun sub (t, index) = Array.sub(#data t, toInt t index)
         fun update (t, index, value) =
@@ -2407,6 +2487,42 @@ structure MonoTensor  =
                      data = newdata}
                 end
         end)
+
+      fun prepad (x: tensor, len, c, dim) =
+          (let val xshape = (#shape x)
+               val xdata  = (#data x)
+           in
+               if (rank x) <= dim then
+                   raise Shape
+               else
+                   let 
+                       val (_,newshape)   = List.foldr
+                                                (fn (x,(i,ax)) => 
+                                                    if (dim = i) then (i-1,len :: ax)
+                                                    else (i-1,x :: ax))
+                                                ((rank x)-1,[]) xshape
+                   in
+                       cat (new (newshape, c), x, dim)
+                   end
+           end)
+
+      fun postpad (x: tensor, len, c, dim) =
+          (let val xshape = (#shape x)
+               val xdata  = (#data x)
+           in
+               if (rank x) <= dim then
+                   raise Shape
+               else
+                   let 
+                       val (_,newshape)   = List.foldr
+                                                (fn (x,(i,ax)) => 
+                                                    if (dim = i) then (i-1,len :: ax)
+                                                    else (i-1,x :: ax))
+                                                ((rank x)-1,[]) xshape
+                   in
+                       cat (x, new (newshape, c), dim)
+                   end
+           end)
 
 
         (*----- ELEMENTWISE OPERATIONS -----*)

@@ -30,6 +30,13 @@ val N2 = 2
 val N3 = 10
 val N =  N1+N2
 
+fun putStrLn (file, str) = 
+    (TextIO.output (file, str);
+     TextIO.output (file, "\n"))
+    
+fun putStr (file, str) = 
+    (TextIO.output (file, str))
+
 
 
 
@@ -88,6 +95,49 @@ val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)
 
 val S  = RTensor.cat (SN1, SN2, 1)
 val _ = TensorFile.realTensorWrite (TextIO.stdOut) S
+
+val _ = putStrLn (TextIO.stdOut, "prepad:")
+val ones = RTensor.new ([2,2],1.0)
+val S  = RTensor.prepad (ones, 2, 0.0, 1)
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) S
+val v = RTensor.sub (S,[0,0])
+val _ = (print "S(0,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[0,1])
+val _ = (print "S(0,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[0,2])
+val _ = (print "S(0,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[0,3])
+val _ = (print "S(0,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,0])
+val _ = (print "S(1,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,1])
+val _ = (print "S(1,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,2])
+val _ = (print "S(1,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,3])
+val _ = (print "S(1,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
+
+val _ = putStrLn (TextIO.stdOut, "prepad:")
+val ones = RTensor.new ([2,2],1.0)
+val S  = RTensor.prepad (ones, 2, 0.0, 0)
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) S
+val v = RTensor.sub (S,[0,0])
+val _ = (print "S(0,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,0])
+val _ = (print "S(1,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[2,0])
+val _ = (print "S(2,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[3,0])
+val _ = (print "S(3,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[0,1])
+val _ = (print "S(0,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[1,1])
+val _ = (print "S(1,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[2,1])
+val _ = (print "S(2,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (S,[3,1])
+val _ = (print "S(3,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+
 
 val v = RTensor.sub (S,[0,0])
 val _ = (print "v = "; TensorFile.realWrite (TextIO.stdOut) v)

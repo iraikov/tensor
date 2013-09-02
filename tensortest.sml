@@ -169,12 +169,12 @@ val _ = TensorFile.realTensorSliceWrite (TextIO.stdOut) S3
 val _ = putStrLn (TextIO.stdOut, "insert:")
 val S    = RTensor.new ([4,4],0.0)
 val ones = RTensor.new ([2,2],1.0)
-val _    = TensorFile.realTensorWrite (TextIO.stdOut) ones
 val twos = RTensor.new ([2,2],2.0)
-val threes = RTensor.new ([2,2],3.0)
+val threes = RTensor.new ([2,1],3.0)
+val _    = TensorFile.realTensorWrite (TextIO.stdOut) threes
+val _    = RTensor.insert (S, threes, [2,0])
 val _    = RTensor.insert (S, ones, [0,0])
 val _    = RTensor.insert (S, twos, [2,2])
-val _    = RTensor.insert (S, threes, [2,0])
 val _    = TensorFile.realTensorWrite (TextIO.stdOut) S
 val v = RTensor.sub (S,[0,0])
 val _ = (print "S(0,0) = "; TensorFile.realWrite (TextIO.stdOut) v)

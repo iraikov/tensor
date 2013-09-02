@@ -827,6 +827,7 @@ signature TENSOR =
         val all : ('a -> bool) -> 'a tensor -> bool
         val any : ('a -> bool) -> 'a tensor -> bool
 
+        val insert :  'a tensor * 'a tensor * index -> unit        
         val cat :  'a tensor * 'a tensor * int -> 'a tensor        
         val prepad : 'a tensor * int * 'a * int -> 'a tensor        
         val postpad : 'a tensor * int * 'a * int -> 'a tensor        
@@ -949,13 +950,54 @@ structure Tensor : TENSOR =
             else
                 raise Shape
 
+        fun insert (x: 'a tensor, y: 'a tensor, i) =
+
+            (let
+                 val xshape     = (#shape x)
+                 val yshape     = (#shape y)
+                 val xdata      = (#data x)
+                 val ydata      = (#data y)
+             in
+                 if not (rank x = rank y) then
+                     raise Shape
+                 else
+                     let
+                         val (xi :: xrst) = i
+                         val xind        = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::xrst))
+                                             | ColMajor => (fn (i) => (i::xrst))
+                         val yindFirst   = Index.first (tl yshape)
+                         val yindLast    = Index.last (tl yshape)
+                         val yslindFirst = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::yindFirst))
+                                             | ColMajor => (fn (i) => (i::yindFirst))
+                         val yslindLast  = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::yindLast))
+                                             | ColMajor => (fn (i) => (i::yindLast))
+                         val (yn::_)    = yshape
+
+                         fun recur (yi,xi) =
+                             let 
+                                 val yn0  = Index.toInt yshape (yslindFirst yi)
+                                 val yn1  = Index.toInt yshape (yslindLast yi)
+                                 val len = yn1-yn0+1
+                                 val ysl = ArraySlice.slice (ydata, yn0, SOME len)
+                             in
+                                 ArraySlice.copy {src=ysl,dst=xdata,di=Index.toInt xshape (xind xi)};
+                                 if (yi < yn-1) then recur (yi+1, xi+1) else ()
+                             end
+                     in
+                         recur (0,xi)
+                     end
+             end)
+
       fun cat (x: 'a tensor, y: 'a tensor, dim) =
         (let val xshape = (#shape x)
              val yshape = (#shape y)
              val xdata  = (#data x)
              val ydata  = (#data y)
         in
-           if  not (rank x  < rank y) then
+           if not (rank x  < rank y) then
            raise Shape
            else
                 let 
@@ -2118,6 +2160,47 @@ structure MonoTensor  =
             else
                 raise Shape
 
+        fun insert (x: tensor, y: tensor, i) =
+
+            (let
+                 val xshape     = (#shape x)
+                 val yshape     = (#shape y)
+                 val xdata      = (#data x)
+                 val ydata      = (#data y)
+             in
+                 if not (rank x = rank y) then
+                     raise Shape
+                 else
+                     let
+                         val (xi :: xrst) = i
+                         val xind        = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::xrst))
+                                             | ColMajor => (fn (i) => (i::xrst))
+                         val yindFirst   = Index.first (tl yshape)
+                         val yindLast    = Index.last (tl yshape)
+                         val yslindFirst = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::yindFirst))
+                                             | ColMajor => (fn (i) => (i::yindFirst))
+                         val yslindLast  = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::yindLast))
+                                             | ColMajor => (fn (i) => (i::yindLast))
+                         val (yn::_)    = yshape
+
+                         fun recur (yi,xi) =
+                             let 
+                                 val yn0  = Index.toInt yshape (yslindFirst yi)
+                                 val yn1  = Index.toInt yshape (yslindLast yi)
+                                 val len = yn1-yn0+1
+                                 val ysl = ArraySlice.slice (ydata, yn0, SOME len)
+                             in
+                                 ArraySlice.copy {src=ysl,dst=xdata,di=Index.toInt xshape (xind xi)};
+                                 if (yi < yn-1) then recur (yi+1, xi+1) else ()
+                             end
+                     in
+                         recur (0,xi)
+                     end
+             end)
+
       fun cat (x: tensor, y: tensor, dim) =
         (let val xshape = (#shape x)
              val yshape = (#shape y)
@@ -2388,6 +2471,7 @@ structure RTensor =
     struct
         structure Number = RNumber
         structure Array = RNumberArray
+        structure ArraySlice = Real64ArraySlice
 
 structure MonoTensor  =
     struct
@@ -2462,6 +2546,48 @@ structure MonoTensor  =
                 end
             else
                 raise Shape
+
+
+        fun insert (x: tensor, y: tensor, i) =
+
+            (let
+                 val xshape     = (#shape x)
+                 val yshape     = (#shape y)
+                 val xdata      = (#data x)
+                 val ydata      = (#data y)
+             in
+                 if not (rank x = rank y) then
+                     raise Shape
+                 else
+                     let
+                         val (xi :: xrst) = i
+                         val xind        = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::xrst))
+                                             | ColMajor => (fn (i) => (i::xrst))
+                         val yindFirst   = Index.first (tl yshape)
+                         val yindLast    = Index.last (tl yshape)
+                         val yslindFirst = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::yindFirst))
+                                             | ColMajor => (fn (i) => (i::yindFirst))
+                         val yslindLast  = case Index.order of 
+                                               RowMajor => (fn (i) => List.rev (i::yindLast))
+                                             | ColMajor => (fn (i) => (i::yindLast))
+                         val (yn::_)    = yshape
+
+                         fun recur (yi,xi) =
+                             let 
+                                 val yn0  = Index.toInt yshape (yslindFirst yi)
+                                 val yn1  = Index.toInt yshape (yslindLast yi)
+                                 val len = yn1-yn0+1
+                                 val ysl = ArraySlice.slice (ydata, yn0, SOME len)
+                             in
+                                 ArraySlice.copy {src=ysl,dst=xdata,di=Index.toInt xshape (xind xi)};
+                                 if (yi < yn-1) then recur (yi+1, xi+1) else ()
+                             end
+                     in
+                         recur (0,xi)
+                     end
+             end)
 
       fun cat (x: tensor, y: tensor, dim) =
         (let val xshape = (#shape x)

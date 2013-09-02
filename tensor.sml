@@ -2540,10 +2540,6 @@ structure MonoTensor  =
                  val xdata      = (#data x)
                  val ydata      = (#data y)
 
-                         fun listWrite converter x =
-                             (List.app (fn x => (TextIO.output (TextIO.stdOut, (converter x) ^ " "))) x)
-
-                         fun intListWrite x = listWrite Int.toString x
              in
                  if not (rank x = rank y) then
                      raise Shape

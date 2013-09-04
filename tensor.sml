@@ -702,7 +702,7 @@ struct
 
 	(* ----- ITERATION ----- *)
 
-	(* Builds an interator that applies 'f' sequentially to
+	(* Builds an iterator that applies 'f' sequentially to
 	   all the indices in the range, *)
 	fun iteri f RangeEmpty = f []
 	  | iteri (f: index -> bool) (RangeIn(shape,lo: index,up: index)) = 
@@ -1508,6 +1508,9 @@ structure RNumber : REAL_NUMBER =
         fun acosh x = ln (x + (x + 1.0) * sqrt((x - 1.0)/(x + 1.0)))
         fun atanh x = ln ((1.0 + x) / sqrt(1.0 - x * x))
 
+        fun toString (r) = (if r < zero 
+                            then ("-" ^ Real.toString (abs r))
+                            else Real.toString r)
     end
 (*
  Complex(R)     - Functor -
@@ -1701,185 +1704,7 @@ structure RNumberArray =
         fun mapi f a = tabulate(length a, fn x => (f (x,sub(a,x))))
         fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
     end
-structure RNumber : REAL_NUMBER =
-    struct
-        open Real
-        open Real.Math
-        type t = Real.real
-        val zero = 0.0
-        val one = 1.0
-        fun signum x = case compare(x,0.0) of
-            LESS => ~1.0
-          | GREATER => 1.0
-          | EQUAL => 0.0
-        fun recip x = 1.0 / x
-        infix **
-        fun i ** n =
-            let fun loop 0 = one
-                  | loop 1 = i
-                  | loop n =
-                let val x = loop (Int.div(n, 2))
-                    val m = Int.mod(n, 2)
-                in
-                    if m = 0 then
-                        x * x
-                    else
-                        x * x * i
-                end
-            in if Int.<(n, 0)
-               then raise Domain
-               else loop n
-            end
-        fun max (a, b) = if a < b then b else a
-        fun min (a, b) = if a < b then a else b
-        fun asinh x = ln (x + sqrt(1.0 + x * x))
-        fun acosh x = ln (x + (x + 1.0) * sqrt((x - 1.0)/(x + 1.0)))
-        fun atanh x = ln ((1.0 + x) / sqrt(1.0 - x * x))
-    end
-(*
- Complex(R)     - Functor -
- Provides support for complex numbers based on tuples. Should be
- highly efficient as most operations can be inlined.
- *)
-structure CNumber : COMPLEX_NUMBER =
-struct
-        structure Real = RNumber
-        type t = Real.t * Real.t
-        type real = Real.t
-        val zero = (0.0,0.0)
-        val one = (1.0,0.0)
-        val pi = (Real.pi, 0.0)
-        val e = (Real.e, 0.0)
-        fun make (r,i) = (r,i) : t
-        fun split z = z
-        fun realPart (r,_) = r
-        fun imagPart (_,i) = i
-        fun abs2 (r,i) = Real.+(Real.*(r,r),Real.*(i,i)) (* FIXME!!! *)
-        fun arg (r,i) = Real.atan2(i,r)
-        fun modulus z = Real.sqrt(abs2 z)
-        fun abs z = (modulus z, 0.0)
-        fun signum (z as (r,i)) =
-            let val m = modulus z
-            in (Real./(r,m), Real./(i,m))
-            end
-        fun ~ (r1,i1) = (Real.~ r1, Real.~ i1)
-        fun (r1,i1) + (r2,i2) = (Real.+(r1,r2), Real.+(i1,i2))
-        fun (r1,i1) - (r2,i2) = (Real.-(r1,r2), Real.-(i1,i1))
-        fun (r1,i1) * (r2,i2) = (Real.-(Real.*(r1,r2),Real.*(i1,i2)),
-                                 Real.+(Real.*(r1,i2),Real.*(r2,i1)))
-        fun (r1,i1) / (r2,i2) =
-            let val modulus = abs2(r2,i2)
-                val (nr,ni) = (r1,i1) * (r2,i2)
-            in
-                (Real./(nr,modulus), Real./(ni,modulus))
-            end
-        fun *+((r1,i1),(r2,i2),(r0,i0)) =
-            (Real.*+(Real.~ i1, i2, Real.*+(r1,r2,r0)),
-             Real.*+(r2, i2, Real.*+(r1,i2,i0)))
-        fun *-((r1,i1),(r2,i2),(r0,i0)) =
-            (Real.*+(Real.~ i1, i2, Real.*-(r1,r2,r0)),
-             Real.*+(r2, i2, Real.*-(r1,i2,i0)))
-        infix **
-        fun i ** n =
-            let fun loop 0 = one
-                  | loop 1 = i
-                  | loop n =
-                let val x = loop (Int.div(n, 2))
-                    val m = Int.mod(n, 2)
-                in
-                    if m = 0 then
-                        x * x
-                    else
-                        x * x * i
-                end
-            in if Int.<(n, 0)
-                   then raise Domain
-               else loop n
-            end
-        fun recip (r1, i1) = 
-            let val modulus = abs2(r1, i1)
-            in (Real./(r1, modulus), Real./(Real.~ i1, modulus))
-            end
-        fun ==(z, w) = Real.==(realPart z, realPart w) andalso Real.==(imagPart z, imagPart w)
-        fun !=(z, w) = Real.!=(realPart z, realPart w) andalso Real.!=(imagPart z, imagPart w)
-        fun fromInt i = (Real.fromInt i, 0.0)
-        fun toString (r,i) =
-            String.concat ["(",Real.toString r,",",Real.toString i,")"]
-        fun exp (x, y) =
-            let val expx = Real.exp x
-            in (Real.*(x, (Real.cos y)), Real.*(x, (Real.sin y)))
-            end
-    local
-        val half = Real.recip (Real.fromInt 2)
-    in
-        fun sqrt (z as (x,y)) =
-            if Real.==(x, 0.0) andalso Real.==(y, 0.0) then
-                zero
-            else
-                let val m = Real.+(modulus z, Real.abs x)
-                    val u' = Real.sqrt (Real.*(m, half))
-                    val v' = Real./(Real.abs y , Real.+(u',u'))
-                    val (u,v) = if Real.<(x, 0.0) then (v',u') else (u',v')
-                in (u, if Real.<(y, 0.0) then Real.~ v else v)
-                end
-    end
-        fun ln z = (Real.ln (modulus z), arg z)
-        fun pow (z, n) =
-            let val l = ln z
-            in exp (l * n)
-            end
-        fun sin (x, y) = (Real.*(Real.sin x, Real.cosh y),
-                          Real.*(Real.cos x, Real.sinh y))
-        fun cos (x, y) = (Real.*(Real.cos x, Real.cosh y),
-                          Real.~ (Real.*(Real.sin x, Real.sinh y)))
-        fun tan (x, y) =
-            let val (sx, cx) = (Real.sin x, Real.cos x)
-                val (shy, chy) = (Real.sinh y, Real.cosh y)
-                val a = (Real.*(sx, chy), Real.*(cx, shy))
-                val b = (Real.*(cx, chy), Real.*(Real.~ sx, shy))
-            in a / b
-            end
-        fun sinh (x, y) = (Real.*(Real.cos y, Real.sinh x),
-                           Real.*(Real.sin y, Real.cosh x))
-        fun cosh (x, y) = (Real.*(Real.cos y, Real.cosh x),
-                           Real.*(Real.sin y, Real.sinh x))
-        fun tanh (x, y) =
-            let val (sy, cy) = (Real.sin y, Real.cos y)
-                val (shx, chx) = (Real.sinh x, Real.cosh x)
-                val a = (Real.*(cy, shx), Real.*(sy, chx))
-                val b = (Real.*(cy, chx), Real.*(sy, shx))
-            in a / b
-            end
-        fun asin (z as (x,y)) =
-            let val w = sqrt (one - z * z)
-                val (x',y') = ln ((Real.~ y, x) + w)
-            in (y', Real.~ x')
-            end
-        fun acos (z as (x,y)) = 
-            let val (x', y') = sqrt (one + z * z)
-                val (x'', y'') = ln (z + (Real.~ y', x'))
-            in (y'', Real.~ x'')
-            end
-        fun atan (z as (x,y)) =
-            let val w = sqrt (one + z*z)
-                val (x',y') = ln ((Real.-(1.0, y), x) / w)
-            in (y', Real.~ x')
-            end
-        fun atan2 (y, x) = atan(y / x)
-        fun asinh x = ln (x + sqrt(one + x * x))
-        fun acosh x = ln (x + (x + one) * sqrt((x - one)/(x + one)))
-        fun atanh x = ln ((one + x) / sqrt(one - x * x))
-        fun scan getc =
-            let val scanner = Real.scan getc
-            in fn stream => 
-                  case scanner stream of
-                      NONE => NONE
-                    | SOME (a, rest) =>
-                      case scanner rest of
-                          NONE => NONE
-                        | SOME (b, rest) => SOME (make(a,b), rest)
-            end
-end (* ComplexNumber *)
+
 
 structure INumberArray =
     struct

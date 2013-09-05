@@ -88,6 +88,12 @@ structure Loop =
                 (f a; appi' (a+d, b, d, f))
             else
                 ()
+
+        fun foldi (a, b, f, init) =
+            if a < b then
+                foldi (a+1, b, f, f (a, init))
+            else
+                init
     end
 (*
   INDEX         -Signature-
@@ -1239,11 +1245,15 @@ structure TensorSlice : TENSOR_SLICE =
         fun foldl f init (slice: 'a slice) = 
         let
            val te     = #tensor slice
+           val sh     = Tensor.shape te
+           val arr    = Tensor.toArray te
            val ra     = #range slice
-           val ax     = ref init
         in 
-           Range.iteri (fn (ndx) => let val ax' = f (Tensor.sub (te,ndx),!ax) in ((ax := ax'); true) end) ra;
-           !ax
+           Range.foldi (fn ((i,j),ax) => 
+                           Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                                       fn (n,ax) => f (Array.sub (arr,n),ax), 
+                                       ax))
+           init ra
         end
 
     end                                
@@ -3161,11 +3171,15 @@ structure RTensorSlice =
         fun foldl f init (slice: slice) = 
         let
            val te     = #tensor slice
+           val sh     = Tensor.shape te
+           val arr    = Tensor.toArray te
            val ra     = #range slice
-           val ax     = ref init
         in 
-           Range.iteri (fn (ndx) => let val ax' = f (Tensor.sub (te,ndx),!ax) in ((ax := ax'); true) end) ra;
-           !ax
+           Range.foldi (fn ((i,j),ax) => 
+                           Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                                       fn (n,ax) => f (Array.sub (arr,n),ax), 
+                                       ax))
+           init ra
         end
 
 

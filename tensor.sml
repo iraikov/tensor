@@ -467,6 +467,7 @@ signature RANGE =
 	val iteri : (index -> bool) -> t -> bool
 	val iteri2 : (index * index -> bool) -> (t * t) -> bool
 
+	val foldi : (((index * index) * 'a) -> 'a) -> 'a -> t -> 'a
         
     end
 
@@ -581,6 +582,34 @@ struct
 	  | build_iterator2 _ _ [] _ = raise Range
 	  | build_iterator2 _ [] _ _ = raise Range
 	  | build_iterator2 [] _ _ _ = raise Range
+
+
+	fun simple_fold (first : int) (last : int) (ndx: index) 
+                        (f: ((index * index) * 'a) -> 'a) (init: 'a) =
+            f ((first::ndx,last::ndx),init)
+
+	fun nested_fold (g: index -> (((index * index) * 'a) -> 'a) -> 'a -> 'a)
+                        (first : int) (last : int) =
+	    let
+                fun loop (ndx: index) (f: ((index * index) * 'a) -> 'a) (init: 'a) =
+		    let
+                        fun innerloop i init =
+                            (if i > last then
+			         init
+		             else 
+			         innerloop (i+1) (g (i::ndx) f init))
+		    in 
+                        innerloop first init
+                    end
+	    in loop end
+            
+	fun build_fold ([a] : index) ([b] : index) = 
+            simple_fold a b
+	  | build_fold (a::ra) (b::rb) =
+	    nested_fold (build_fold ra rb) a b
+	  | build_fold [] _ = raise Range
+	  | build_fold _ [] = raise Range
+
 
     in
 
@@ -730,6 +759,21 @@ struct
                                                         (build_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f) 
                                                     (set,set') ))
 	  | iteri2 f (_,_) = raise Range
+
+	(* Builds an iterator that applies 'f' sequentially to
+	   all the ranges of contiguous indices (i,j) *)
+	fun foldi f init RangeEmpty = init
+
+	  | foldi (f: ((index * index) * 'a -> 'a)) init (RangeIn(shape,lo: index,up: index)) = 
+            (case Index.order of
+                 Index.RowMajor => ((build_fold lo up) [] f init)
+               | Index.ColumnMajor => ((build_fold (List.rev lo) (List.rev up)) [] f init))
+
+	  | foldi (f: ((index * index) * 'a -> 'a)) init (RangeSet(shape,set)) = 
+            (case Index.order of
+                 Index.RowMajor => (List.foldl (fn ((lo,up),init) => ((build_fold lo up) [] f init)) init set)
+               | Index.ColumnMajor => (List.foldl (fn ((lo,up),init) => ((build_fold (List.rev lo) (List.rev up)) [] f init)) init set))
+
             
 
     end

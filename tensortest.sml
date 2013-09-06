@@ -210,7 +210,7 @@ val v = RTensor.sub (S,[3,3])
 val _ = (print "S(3,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
 
 val r  = Range.fromto (RTensor.shape SN) ([0,0],[1,4])
-val xs = Range.foldi
+val xs = Range.foldi_range
              (fn ((i,j),ax) => (Index.toInt (RTensor.shape SN) i,
                                 Index.toInt (RTensor.shape SN) j) :: ax)
              [] r

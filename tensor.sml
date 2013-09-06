@@ -195,6 +195,7 @@ signature INDEX =
         val >= : t * t -> bool
         val <> : t * t -> bool
         val - : t * t -> t
+        val + : t * t -> t
 
         val validShape : t -> bool
         val validIndex : t -> bool
@@ -443,6 +444,7 @@ structure Index : INDEX =
 	fun a <= b = not (a > b)
 	fun a >= b = not (a < b)
 	fun a - b = ListPair.map Int.- (a,b)
+	fun a + b = ListPair.map Int.+ (a,b)
 
     end
 
@@ -473,7 +475,9 @@ signature RANGE =
 	val iteri : (index -> bool) -> t -> bool
 	val iteri2 : (index * index -> bool) -> (t * t) -> bool
 
-	val foldi : (((index * index) * 'a) -> 'a) -> 'a -> t -> 'a
+	val iteri_range : (index * index -> bool) -> t -> bool
+	val iteri2_range : (((index * index) * (index * index)) -> bool) -> (t * t) -> bool
+	val foldi_range : (((index * index) * 'a) -> 'a) -> 'a -> t -> 'a
         
     end
 
@@ -590,12 +594,72 @@ struct
 	  | build_iterator2 [] _ _ _ = raise Range
 
 
-	fun simple_fold (first : int) (last : int) (ndx: index) 
-                        (f: ((index * index) * 'a) -> 'a) (init: 'a) =
+	fun simple_range_loop (first : int) (last : int) (ndx: index)
+                              (f: (index * index) -> bool) =
+            f ((first::ndx,last::ndx))
+
+	fun nested_range_loop (g: index -> ((index * index) -> bool) -> bool)
+                         (first : int) (last : int) =
+	    let
+                fun loop (ndx: index) (f: (index * index) -> bool) =
+		    let
+                        fun innerloop i =
+                            (if i > last then
+			         true
+		             else 
+                                 if (g (i::ndx) f) 
+                                 then innerloop (i+1)
+                                 else false)
+		    in 
+                        innerloop first
+                    end
+	    in loop end
+            
+	fun build_range_iterator ([a] : index) ([b] : index) = 
+            simple_range_loop a b
+	  | build_range_iterator (a::ra) (b::rb) =
+	    nested_range_loop (build_range_iterator ra rb) a b
+	  | build_range_iterator [] _ = raise Range
+	  | build_range_iterator _ [] = raise Range
+
+
+	fun simple_range_loop2 (first : int) (last : int) (first' : int) (last' : int)
+                               (ndx: index) (ndx': index) 
+                               (f: ((index * index) * (index * index)) -> bool) =
+            f ((first::ndx,last::ndx),(first'::ndx',last'::ndx'))
+
+	fun nested_range_loop2 f (first : int) (last : int) (first' : int) (last' : int) =
+	    let fun loop (ndx: index) (ndx': index) (g: ((index * index) * (index * index)) -> bool) =
+		let fun innerloop (i,j) =
+		    (if i > last andalso j > last' then
+			true
+		    else if (f (i::ndx) (j::ndx') g) then
+			innerloop (i+1,j+1)
+		    else
+			false)
+		in 
+                     innerloop (first,first')
+                end
+	    in loop end
+
+
+	fun build_range_iterator2 ([a] : index) ([b] : index) ([a'] : index) ([b'] : index) = 
+            simple_range_loop2 a b a' b'
+	  | build_range_iterator2 (a::ra) (b::rb) (a'::ra') (b'::rb') =
+	    nested_range_loop2 (build_range_iterator2 ra rb ra' rb') a b a' b'
+	  | build_range_iterator2 _ _ _ [] = raise Range
+	  | build_range_iterator2 _ _ [] _ = raise Range
+	  | build_range_iterator2 _ [] _ _ = raise Range
+	  | build_range_iterator2 [] _ _ _ = raise Range
+
+
+
+	fun simple_range_fold (first : int) (last : int) (ndx: index) 
+                              (f: ((index * index) * 'a) -> 'a) (init: 'a) =
             f ((first::ndx,last::ndx),init)
 
-	fun nested_fold (g: index -> (((index * index) * 'a) -> 'a) -> 'a -> 'a)
-                        (first : int) (last : int) =
+	fun nested_range_fold (g: index -> (((index * index) * 'a) -> 'a) -> 'a -> 'a)
+                              (first : int) (last : int) =
 	    let
                 fun loop (ndx: index) (f: ((index * index) * 'a) -> 'a) (init: 'a) =
 		    let
@@ -609,12 +673,12 @@ struct
                     end
 	    in loop end
             
-	fun build_fold ([a] : index) ([b] : index) = 
-            simple_fold a b
-	  | build_fold (a::ra) (b::rb) =
-	    nested_fold (build_fold ra rb) a b
-	  | build_fold [] _ = raise Range
-	  | build_fold _ [] = raise Range
+	fun build_range_fold ([a] : index) ([b] : index) = 
+            simple_range_fold a b
+	  | build_range_fold (a::ra) (b::rb) =
+	    nested_range_fold (build_range_fold ra rb) a b
+	  | build_range_fold [] _ = raise Range
+	  | build_range_fold _ [] = raise Range
 
 
     in
@@ -766,19 +830,54 @@ struct
                                                     (set,set') ))
 	  | iteri2 f (_,_) = raise Range
 
+
 	(* Builds an iterator that applies 'f' sequentially to
 	   all the ranges of contiguous indices (i,j) *)
-	fun foldi f init RangeEmpty = init
+	fun iteri_range f RangeEmpty = f ([],[])
 
-	  | foldi (f: ((index * index) * 'a -> 'a)) init (RangeIn(shape,lo: index,up: index)) = 
-            (case Index.order of
-                 Index.RowMajor => ((build_fold lo up) [] f init)
-               | Index.ColumnMajor => ((build_fold (List.rev lo) (List.rev up)) [] f init))
+	  | iteri_range (f: index * index -> bool) (RangeIn(shape,lo: index,up: index)) = 
+           (case Index.order of
+                Index.RowMajor => ((build_range_iterator lo up) [] f)
+              | Index.ColumnMajor => ((build_range_iterator (List.rev lo) (List.rev up)) [] f))
 
-	  | foldi (f: ((index * index) * 'a -> 'a)) init (RangeSet(shape,set)) = 
+	  | iteri_range (f: index * index -> bool) (RangeSet(shape,set)) = 
+           (case Index.order of
+                Index.RowMajor => (List.all (fn (lo,up) => ((build_range_iterator lo up) [] f)) set)
+              | Index.ColumnMajor => (List.all (fn (lo,up) => ((build_range_iterator (List.rev lo) (List.rev up)) [] f)) set))
+
+	(* Builds an interator that applies 'f' sequentially to
+	   all the contiguous indices of the two ranges, *)
+	fun iteri2_range f (RangeEmpty,RangeEmpty) = f (([],[]),([],[]))
+	  | iteri2_range (f: ((index * index) * (index * index)) -> bool) 
+                         (RangeIn(shape,lo: index,up: index),RangeIn(shape',lo': index,up': index)) = 
             (case Index.order of
-                 Index.RowMajor => (List.foldl (fn ((lo,up),init) => ((build_fold lo up) [] f init)) init set)
-               | Index.ColumnMajor => (List.foldl (fn ((lo,up),init) => ((build_fold (List.rev lo) (List.rev up)) [] f init)) init set))
+                 Index.RowMajor => ((build_range_iterator2 lo up lo' up') [] [] f )
+               | Index.ColumnMajor => ((build_range_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f ))
+	  | iteri2_range (f: ((index * index) * (index * index)) -> bool) 
+                   (RangeSet(shape,set),RangeSet(shape',set')) = 
+            (case Index.order of
+                 Index.RowMajor => (ListPair.all (fn ((lo,up),(lo',up')) => 
+                                                     (build_range_iterator2 lo up lo' up') [] [] f)
+                                                 (set,set') )
+               | Index.ColumnMajor => (ListPair.all (fn ((lo,up),(lo',up')) => 
+                                                        (build_range_iterator2 (List.rev lo) (List.rev up) (List.rev lo') (List.rev up')) [] [] f) 
+                                                    (set,set') ))
+	  | iteri2_range f (_,_) = raise Range
+
+
+	(* Builds an iterator that applies 'f' sequentially to
+	   all the ranges of contiguous indices (i,j) *)
+	fun foldi_range f init RangeEmpty = init
+
+	  | foldi_range (f: ((index * index) * 'a -> 'a)) init (RangeIn(shape,lo: index,up: index)) = 
+            (case Index.order of
+                 Index.RowMajor => ((build_range_fold lo up) [] f init)
+               | Index.ColumnMajor => ((build_range_fold (List.rev lo) (List.rev up)) [] f init))
+
+	  | foldi_range (f: ((index * index) * 'a -> 'a)) init (RangeSet(shape,set)) = 
+            (case Index.order of
+                 Index.RowMajor => (List.foldl (fn ((lo,up),init) => ((build_range_fold lo up) [] f init)) init set)
+               | Index.ColumnMajor => (List.foldl (fn ((lo,up),init) => ((build_range_fold (List.rev lo) (List.rev up)) [] f init)) init set))
 
             
 
@@ -867,7 +966,7 @@ signature TENSOR =
         val all : ('a -> bool) -> 'a tensor -> bool
         val any : ('a -> bool) -> 'a tensor -> bool
 
-        val insert :  'a tensor * 'a tensor * index -> unit        
+        val insert :  'a tensor * 'a tensor * index -> bool        
         val cat :  'a tensor * 'a tensor * int -> 'a tensor        
         val prepad : 'a tensor * int * 'a * int -> 'a tensor        
         val postpad : 'a tensor * int * 'a * int -> 'a tensor        
@@ -991,115 +1090,95 @@ structure Tensor : TENSOR =
                 raise Shape
 
         fun insert (x: 'a tensor, y: 'a tensor, i) =
+            let
+                val xshape     = (#shape x)
+                val yshape     = (#shape y)
+                val xdata      = (#data x)
+                val ydata      = (#data y)
+            in
+                if not (rank x = rank y) 
+                then raise Shape
+                else 
+                    (let 
+                        val yr = Range.fromto yshape (Index.first yshape, Index.last yshape)
+                        val xr = Range.fromto xshape (i, Index.+ (i, Index.last yshape))
+                    in
+                        Range.iteri2_range 
+                            (fn ((xi,xi'),(yi,yi')) => 
+                                let 
+                                    val yn0  = Index.toInt yshape yi
+                                    val yn1  = Index.toInt yshape yi'
+                                    val len  = yn1-yn0+1
+                                    val ysl = ArraySlice.slice (ydata, yn0, SOME len)
+                                in
+                                    (ArraySlice.copy {src=ysl,dst=xdata,di=(Index.toInt xshape xi)};
+                                     true)
+                                end)
+                            (xr,yr)
+                    end)
+            end
 
-            (let
-                 val xshape     = (#shape x)
-                 val yshape     = (#shape y)
-                 val xdata      = (#data x)
-                 val ydata      = (#data y)
-
+        fun cat (x: 'a tensor, y: 'a tensor, dim) =
+            (let val xshape = (#shape x)
+                 val yshape = (#shape y)
+                 val xdata  = (#data x)
+                 val ydata  = (#data y)
              in
-                 if not (rank x = rank y) then
+                 if not (rank x  < rank y) then
                      raise Shape
                  else
-                     let
-                         val (xn::_)      = case Index.order of 
-                                                Index.RowMajor => xshape
-                                              | Index.ColumnMajor => List.rev xshape
-                         val (xi :: xrst) = i
-                         val xind         = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::xrst))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::xrst))
-                         val yindFirst    = case Index.order of 
-                                                Index.RowMajor => Index.first (tl (List.rev yshape))
-                                              | Index.ColumnMajor => Index.first (tl yshape)
-                         val yindLast     = case Index.order of 
-                                                Index.RowMajor => Index.last (tl yshape)
-                                              | Index.ColumnMajor => Index.last (tl (List.rev yshape))
-                         val yslindFirst  = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::yindFirst))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::yindFirst))
-                         val yslindLast   = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::yindLast))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::yindLast))
-                         val (yn::_)      = case Index.order of 
-                                                Index.RowMajor => yshape
-                                              | Index.ColumnMajor => List.rev yshape
+                     let 
+                         val (_,newshape)   = ListPair.foldr
+                                                  (fn (x,y,(i,ax)) => if (dim = i) then (i-1,(x+y) :: ax) 
+                                                                      else if not (x=y) then raise Shape else (i-1,x :: ax))
+                                                  ((rank x)-1,[]) (xshape, yshape)
+                         val newlength  = Index.length newshape 
+                         val newdata    = Array.array(newlength,Array.sub(xdata,0))
                      in
-                         Loop.app2 (0,yn,xi,xi+yn,
-                                    fn (yi,xi) =>
-                                       let 
-                                           val yn0  = Index.toInt yshape (yslindFirst yi)
-                                           val yn1  = Index.toInt yshape (yslindLast yi)
-                                           val len  = yn1-yn0+1
-                                           val ysl = ArraySlice.slice (ydata, yn0, SOME len)
-                                       in
-                                           ArraySlice.copy {src=ysl,dst=xdata,di=Index.toInt xshape (xind xi)}
-                                       end)
+                         Array.copy {src=xdata,dst=newdata,di=0};
+                         Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
+                         {shape = newshape,
+                          indexer = Index.indexer newshape,
+                          data = newdata}
                      end
              end)
-
-      fun cat (x: 'a tensor, y: 'a tensor, dim) =
-        (let val xshape = (#shape x)
-             val yshape = (#shape y)
-             val xdata  = (#data x)
-             val ydata  = (#data y)
-        in
-           if not (rank x  < rank y) then
-           raise Shape
-           else
-                let 
-                   val (_,newshape)   = ListPair.foldr
-                                      (fn (x,y,(i,ax)) => if (dim = i) then (i-1,(x+y) :: ax) 
-                                                                       else if not (x=y) then raise Shape else (i-1,x :: ax))
-                                       ((rank x)-1,[]) (xshape, yshape)
-                   val newlength  = Index.length newshape 
-                   val newdata    = Array.array(newlength,Array.sub(xdata,0))
-                in
-                    Array.copy {src=xdata,dst=newdata,di=0};
-                    Array.copy {src=ydata,dst=newdata,di=(Index.length xshape)};
-                    {shape = newshape,
-                     indexer = Index.indexer newshape,
-                     data = newdata}
-                end
-        end)
-
-
-      fun prepad (x: 'a tensor, len, c, dim) =
-          (let val xshape = (#shape x)
-               val xdata  = (#data x)
-           in
-               if (rank x) <= dim then
-                   raise Shape
-               else
-                   let 
-                       val (_,newshape)   = List.foldr
-                                                (fn (x,(i,ax)) => 
-                                                    if (dim = i) then (i-1,len :: ax)
-                                                    else (i-1,x :: ax))
-                                                ((rank x)-1,[]) xshape
-                   in
-                       cat (new (newshape, c), x, dim)
-                   end
-           end)
-
-      fun postpad (x: 'a tensor, len, c, dim) =
-          (let val xshape = (#shape x)
-               val xdata  = (#data x)
-           in
-               if (rank x) <= dim then
-                   raise Shape
-               else
-                   let 
-                       val (_,newshape)   = List.foldr
-                                                (fn (x,(i,ax)) => 
-                                                    if (dim = i) then (i-1,len :: ax)
-                                                    else (i-1,x :: ax))
-                                                ((rank x)-1,[]) xshape
-                   in
-                       cat (x, new (newshape, c), dim)
-                   end
-           end)
+                
+                
+        fun prepad (x: 'a tensor, len, c, dim) =
+            (let val xshape = (#shape x)
+                 val xdata  = (#data x)
+             in
+                 if (rank x) <= dim then
+                     raise Shape
+                 else
+                     let 
+                         val (_,newshape)   = List.foldr
+                                                  (fn (x,(i,ax)) => 
+                                                      if (dim = i) then (i-1,len :: ax)
+                                                      else (i-1,x :: ax))
+                                                  ((rank x)-1,[]) xshape
+                     in
+                         cat (new (newshape, c), x, dim)
+                     end
+             end)
+                
+        fun postpad (x: 'a tensor, len, c, dim) =
+            (let val xshape = (#shape x)
+                 val xdata  = (#data x)
+             in
+                 if (rank x) <= dim then
+                     raise Shape
+                 else
+                     let 
+                         val (_,newshape)   = List.foldr
+                                                  (fn (x,(i,ax)) => 
+                                                      if (dim = i) then (i-1,len :: ax)
+                                                      else (i-1,x :: ax))
+                                                  ((rank x)-1,[]) xshape
+                     in
+                         cat (x, new (newshape, c), dim)
+                     end
+             end)
 
 
 
@@ -1249,11 +1328,12 @@ structure TensorSlice : TENSOR_SLICE =
            val arr    = Tensor.toArray te
            val ra     = #range slice
         in 
-           Range.foldi (fn ((i,j),ax) => 
-                           Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
-                                       fn (n,ax) => f (Array.sub (arr,n),ax), 
-                                       ax))
-           init ra
+           Range.foldi_range
+               (fn ((i,j),ax) => 
+                   Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                               fn (n,ax) => f (Array.sub (arr,n),ax), 
+                               ax))
+               init ra
         end
 
     end                                
@@ -2037,54 +2117,7 @@ structure MonoTensor  =
             else
                 raise Shape
 
-        fun insert (x: tensor, y: tensor, i) =
 
-            (let
-                 val xshape     = (#shape x)
-                 val yshape     = (#shape y)
-                 val xdata      = (#data x)
-                 val ydata      = (#data y)
-
-             in
-                 if not (rank x = rank y) then
-                     raise Shape
-                 else
-                     let
-                         val (xn::_)      = case Index.order of 
-                                                Index.RowMajor => xshape
-                                              | Index.ColumnMajor => List.rev xshape
-                         val (xi :: xrst) = i
-                         val xind         = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::xrst))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::xrst))
-                         val yindFirst    = case Index.order of 
-                                                Index.RowMajor => Index.first (tl (List.rev yshape))
-                                              | Index.ColumnMajor => Index.first (tl yshape)
-                         val yindLast     = case Index.order of 
-                                                Index.RowMajor => Index.last (tl yshape)
-                                              | Index.ColumnMajor => Index.last (tl (List.rev yshape))
-                         val yslindFirst  = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::yindFirst))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::yindFirst))
-                         val yslindLast   = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::yindLast))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::yindLast))
-                         val (yn::_)      = case Index.order of 
-                                                Index.RowMajor => yshape
-                                              | Index.ColumnMajor => List.rev yshape
-                     in
-                         Loop.app2 (0,yn,xi,xi+yn,
-                                    fn (yi,xi) =>
-                                       let 
-                                           val yn0  = Index.toInt yshape (yslindFirst yi)
-                                           val yn1  = Index.toInt yshape (yslindLast yi)
-                                           val len  = yn1-yn0+1
-                                           val ysl = ArraySlice.slice (ydata, yn0, SOME len)
-                                       in
-                                           ArraySlice.copy {src=ysl,dst=xdata,di=Index.toInt xshape (xind xi)}
-                                       end)
-                     end
-             end)
 
       fun cat (x: tensor, y: tensor, dim) =
         (let val xshape = (#shape x)
@@ -2434,53 +2467,33 @@ structure MonoTensor  =
 
 
         fun insert (x: tensor, y: tensor, i) =
-
-            (let
-                 val xshape     = (#shape x)
-                 val yshape     = (#shape y)
-                 val xdata      = (#data x)
-                 val ydata      = (#data y)
-
-             in
-                 if not (rank x = rank y) then
-                     raise Shape
-                 else
-                     let
-                         val (xn::_)      = case Index.order of 
-                                                Index.RowMajor => xshape
-                                              | Index.ColumnMajor => List.rev xshape
-                         val (xi :: xrst) = i
-                         val xind         = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::xrst))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::xrst))
-                         val yindFirst    = case Index.order of 
-                                                Index.RowMajor => Index.first (tl (List.rev yshape))
-                                              | Index.ColumnMajor => Index.first (tl yshape)
-                         val yindLast     = case Index.order of 
-                                                Index.RowMajor => Index.last (tl yshape)
-                                              | Index.ColumnMajor => Index.last (tl (List.rev yshape))
-                         val yslindFirst  = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::yindFirst))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::yindFirst))
-                         val yslindLast   = case Index.order of 
-                                                Index.RowMajor => (fn (i) => (i::yindLast))
-                                              | Index.ColumnMajor => (fn (i) => List.rev (i::yindLast))
-                         val (yn::_)      = case Index.order of 
-                                                Index.RowMajor => yshape
-                                              | Index.ColumnMajor => List.rev yshape
-                     in
-                         Loop.app2 (0,yn,xi,xi+yn,
-                                    fn (yi,xi) =>
-                                       let 
-                                           val yn0  = Index.toInt yshape (yslindFirst yi)
-                                           val yn1  = Index.toInt yshape (yslindLast yi)
-                                           val len  = yn1-yn0+1
-                                           val ysl = ArraySlice.slice (ydata, yn0, SOME len)
-                                       in
-                                           ArraySlice.copy {src=ysl,dst=xdata,di=Index.toInt xshape (xind xi)}
-                                       end)
-                     end
-             end)
+            let
+                val xshape     = (#shape x)
+                val yshape     = (#shape y)
+                val xdata      = (#data x)
+                val ydata      = (#data y)
+            in
+                if not (rank x = rank y) 
+                then raise Shape
+                else 
+                    (let 
+                        val yr = Range.fromto yshape (Index.first yshape, Index.last yshape)
+                        val xr = Range.fromto xshape (i, Index.+ (i, Index.last yshape))
+                    in
+                        Range.iteri2_range 
+                            (fn ((xi,xi'),(yi,yi')) => 
+                                let 
+                                    val yn0  = Index.toInt yshape yi
+                                    val yn1  = Index.toInt yshape yi'
+                                    val len  = yn1-yn0+1
+                                    val ysl = ArraySlice.slice (ydata, yn0, SOME len)
+                                in
+                                    (ArraySlice.copy {src=ysl,dst=xdata,di=(Index.toInt xshape xi)};
+                                     true)
+                                end)
+                            (xr,yr)
+                    end)
+            end
 
       fun cat (x: tensor, y: tensor, dim) =
         (let val xshape = (#shape x)
@@ -3175,11 +3188,12 @@ structure RTensorSlice =
            val arr    = Tensor.toArray te
            val ra     = #range slice
         in 
-           Range.foldi (fn ((i,j),ax) => 
-                           Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
-                                       fn (n,ax) => f (Array.sub (arr,n),ax), 
-                                       ax))
-           init ra
+            Range.foldi_range
+                (fn ((i,j),ax) => 
+                    Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                                fn (n,ax) => f (Array.sub (arr,n),ax), 
+                                ax))
+                init ra
         end
 
 

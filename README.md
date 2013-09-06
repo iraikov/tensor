@@ -141,4 +141,11 @@ all test a
 any test a
         Folded boolean tests on the elements of the tensor.
 
+insert a b index
+        Inserts b into a starting at the given index
+        a and b must be of the same rank, with b smaller than a
+
+cat a b int
+        Concatenates a and b along the given axis
+
 

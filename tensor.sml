@@ -198,6 +198,7 @@ signature INDEX =
         val <> : t * t -> bool
         val - : t * t -> t
         val + : t * t -> t
+        val decr: t -> t
 
         val validShape : t -> bool
         val validIndex : t -> bool
@@ -438,6 +439,7 @@ structure Index : INDEX =
     in
 	fun app shape = build_iterator shape []
     end
+    
 
 	fun a < b = compare(a,b) = LESS
 	fun a > b = compare(a,b) = GREATER
@@ -447,6 +449,8 @@ structure Index : INDEX =
 	fun a >= b = not (a < b)
 	fun a - b = ListPair.map Int.- (a,b)
 	fun a + b = ListPair.map Int.+ (a,b)
+
+        fun decr a = List.map (fn (x) => Int.-(x,1)) a
 
     end
 
@@ -759,9 +763,9 @@ struct
 
 	fun inRange RangeEmpty _ = false
 	  | inRange (RangeIn(shape,lo,up)) ndx =
-	    (Index.<=(lo,ndx)) andalso (Index.<=(ndx,up))
+	    (ListPair.all (op <=) (lo,ndx)) andalso (ListPair.all (op <=) (ndx,up))
 	  | inRange (RangeSet(shape,set)) ndx =
-	    List.exists (fn ((lo,up)) => (Index.<=(lo,ndx)) andalso (Index.<=(ndx,up))) set
+	    List.exists (fn ((lo,up)) => (ListPair.all (op <=) (lo,ndx)) andalso (ListPair.all (op <=) (ndx,up))) set
 
 	fun next RangeEmpty _ = NONE
 	  | next (RangeIn(shape,lo,up)) index =
@@ -1447,6 +1451,32 @@ signature MONO_TENSOR =
         val map' : (elem -> 'a) -> tensor -> 'a Tensor.tensor
         val map2' : (elem * elem -> 'a) -> tensor -> tensor -> 'a Tensor.tensor
         val foldl' : ('a * elem -> 'a) -> 'a -> tensor -> int -> 'a Tensor.tensor
+    end
+
+signature MONO_TENSOR_SLICE =
+    sig
+        structure Tensor : MONO_TENSOR
+        structure Range : RANGE
+
+        type index = Tensor.Index.t
+        type range = Range.t
+        type tensor = Tensor.tensor
+        type slice
+        type elem
+
+        val fromto : index * index * tensor -> slice
+        val slice  : ((index * index) list) * tensor -> slice
+
+        val length : slice -> int
+        val base   : slice -> tensor
+        val shape  : slice -> (index)
+        val range  : slice -> (range)
+
+        val app : (elem -> unit) -> slice -> unit
+        val map : (elem -> elem) -> slice -> tensor
+        val map2 : (elem * elem -> elem) -> slice -> slice -> tensor
+        val foldl  : (elem * 'a -> 'a) -> 'a -> slice -> 'a
+
     end
 
 (*
@@ -3118,7 +3148,8 @@ structure RTensorSlice =
         structure Index  = Tensor.Index
         structure Array  = Tensor.Array
         structure Range  = Range
-            
+
+        type elem = Array.elem
         type index = Tensor.Index.t
         type range = Range.t
         type tensor = RTensor.tensor
@@ -3310,9 +3341,11 @@ fun realTensorWrite file x = (intListWrite file (RTensor.shape x); RTensor.app (
 fun complexTensorWrite file x = (intListWrite file (CTensor.shape x); CTensor.app (fn x => (complexWrite file x)) x)
 
 fun intTensorLineWrite file x = (TextIO.output (file, "["); listLineWrite INumber.toString file (ITensor.shape x); TextIO.output (file, " ]"); 
-                                  ITensor.app (fn x => (TextIO.output (file, (" " ^ (INumber.toString x))))) x)
+                                 ITensor.app (fn x => (TextIO.output (file, (" " ^ (INumber.toString x))))) x;
+                                 putStrLn (TextIO.stdOut, ""))
 fun realTensorLineWrite file x = (TextIO.output (file, "["); listLineWrite INumber.toString file (RTensor.shape x); TextIO.output (file, " ]"); 
-                                  RTensor.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x)
+                                  RTensor.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x;
+                                  putStrLn (TextIO.stdOut, ""))
 fun complexTensorLineWrite file x = (TextIO.output (file, "["); listLineWrite INumber.toString file (CTensor.shape x); TextIO.output (file, " ]"); 
                                      CTensor.app (fn x => (TextIO.output (file, (" " ^ (CNumber.toString x))))) x)
 
@@ -3320,6 +3353,7 @@ fun realTensorSliceWrite file x =
     (intListWrite file (RTensorSlice.shape x); RTensorSlice.app (fn x => (realWrite file x)) x)
 fun realTensorSliceLineWrite file x = 
     (TextIO.output (file, "["); listLineWrite INumber.toString file (RTensorSlice.shape x); TextIO.output (file, " ]"); 
-     RTensorSlice.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x)
+     RTensorSlice.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x;
+     putStrLn (TextIO.stdOut, ""))
 
 end

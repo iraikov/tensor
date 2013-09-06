@@ -92,7 +92,7 @@ signature SPARSE_INDEX =
 	Elementwise operations.
 *)
 
-signature MONO_SPARSE =
+signature MONO_SPARSE_MATRIX =
     sig
 	structure Tensor : MONO_TENSOR
 	structure Number : NUMBER
@@ -116,11 +116,12 @@ signature MONO_SPARSE =
 	val map : (elem -> elem) -> matrix -> matrix
 	val app : (elem -> unit) -> matrix -> unit
 
+
 (*
 	val mapi : (index * elem -> elem) -> matrix -> matrix
 	val appi : (index * elem -> unit) -> matrix -> unit
-
 	val map2 : (elem * elem -> elem) -> matrix -> matrix -> matrix
+
 
 	val + : matrix * matrix -> matrix
 	val - : matrix * matrix -> matrix
@@ -249,7 +250,7 @@ structure SparseIndex =
 
 
 
-structure SparseMatrix : MONO_SPARSE =
+structure SparseMatrix : MONO_SPARSE_MATRIX =
 
 struct
     structure Tensor : MONO_TENSOR = RTensor
@@ -433,6 +434,9 @@ struct
 
     fun app f {shape, nz, data} = Array.app f data
 
+    fun map f {shape, nz, data} =
+        {shape=shape, nz=nz, data=array_map f data}
+
 
     (* --- BINOPS --- *)
 (*
@@ -445,3 +449,150 @@ struct
 end
 
 
+
+signature MONO_SPARSE_TENSOR =
+    sig
+	structure Tensor : MONO_TENSOR
+	structure TensorSlice : MONO_TENSOR_SLICE
+	structure Number : NUMBER
+	structure Index  : INDEX
+	structure Range  : RANGE
+
+        type index = Index.t
+	type elem = Number.t
+	type tensor
+
+	exception Shape
+
+        val new: index * elem -> tensor
+
+	val shape : tensor -> index
+        val length : tensor -> int
+        val rank : tensor -> int
+
+	val sub : tensor * index -> elem
+	val update : tensor * index * elem -> unit
+        val insert :  tensor * Tensor.tensor * index -> tensor
+
+	val slice : ((index * index) * tensor) -> TensorSlice.slice list
+
+	val map : (elem -> elem) -> tensor -> Tensor.tensor list
+	val app : (elem -> unit) -> tensor -> unit
+
+    end
+
+
+structure SparseTensor : MONO_SPARSE_TENSOR =
+
+struct
+    structure Tensor : MONO_TENSOR = RTensor
+    structure TensorSlice : MONO_TENSOR_SLICE = RTensorSlice
+    structure Number = RTensor.Number
+    structure Index  = Index
+    structure Range  = Range
+
+    type index   = Index.t
+    type elem    = Number.t
+    type range   = Range.t
+    type block   = {r: range, data: Tensor.tensor}
+    type tensor  = {shape: index, nz: block list, default: elem}
+
+    exception Shape
+    exception Index
+    exception Overlap
+
+    fun new (shape, init) =
+        if not (Index.validShape shape) then
+            raise Shape
+        else
+            {shape = shape, nz=[], default=init}
+
+    fun default {shape, nz, default} = default
+                
+    fun length ({shape, nz, default}: tensor) =  
+        List.foldl (fn (b,ax) => (Tensor.length (#data b))+ax) 0 nz
+              
+    fun shape {shape, nz, default} = shape
+
+    fun rank t = List.length (shape t)
+
+    fun whichBlock ({shape, nz, default}: tensor) i =
+        List.find (fn (b) => Range.inRange (#r b) i) nz
+
+    fun sub (t as {shape, nz, default}, i) = 
+        case whichBlock t i of
+            SOME b => 
+            let
+                val i' = Index.-(i, Range.first (#r b)) 
+            in 
+                Tensor.sub ((#data b), i')
+            end
+          | NONE => default
+
+    fun update (t as {shape, nz, default}, i, v) = 
+        case whichBlock t i of
+            SOME b => 
+            let
+                val i' = Index.-(i, Range.first (#r b)) 
+            in Tensor.update ((#data b), i', v) end
+          | NONE => raise Index
+                             
+    fun insert (x: tensor, y: Tensor.tensor, i) =
+        if not (rank x = Tensor.rank y) 
+        then raise Shape
+        else 
+            (let
+                val xshape  = shape x
+                val yshape  = Tensor.shape y
+                val nzx     = #nz x
+                val j       = Index.decr (Index.+ (i,yshape))
+                val r       = Range.fromto xshape (i,j)
+                val b'      = {r=r,data=y}
+
+                val nzx'    = 
+                    let
+                        fun merge ([], []) = [b']
+                          | merge (b::rst, ax) =
+                            let 
+                                val bi = Range.first (#r b)
+                                val bj = Range.last (#r b)
+                            in
+                                if Index.< (j, bi)
+                                then List.rev (rst@(b::b'::ax))
+                                else (if Index.>= (i, bi) andalso Index.<= (i, bj)
+                                      then raise Overlap
+                                      else merge (rst, b::ax))
+                            end
+                            | merge ([], ax) = List.rev (b'::ax)
+                    in
+                        merge (nzx, [])
+                    end
+            in
+                {shape=xshape, nz=nzx', default=(#default x)}
+            end)
+
+    fun map f ({shape, nz, default}: tensor) =
+        List.map (fn (b) => Tensor.map f (#data b)) nz
+                 
+    fun app f ({shape, nz, default}: tensor) =
+        List.app (fn (b) => Tensor.app f (#data b)) nz
+
+    fun slice ((i,j),{shape, nz, default}: tensor) = 
+        let
+            fun slice' (b::rst, ax) =
+                let 
+                    val bi = Range.first (#r b)
+                    val bj = Range.last (#r b)
+                    val si = Index.-(i,bi)
+                    val sj = Index.-(j,bj)
+                in
+                    if Index.>= (i, bi) orelse Index.<= (j, bj)
+                    then slice' (rst, (RTensorSlice.slice ([(si,sj)],(#data b)))::ax)
+                    else slice' (rst, ax)
+                end
+                | slice' ([],ax) = ax
+        in
+            slice' (nz, [])
+        end
+                
+end

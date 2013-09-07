@@ -47,17 +47,17 @@ val _  = TensorFile.realTensorWrite (TextIO.stdOut) T'
 
 val ST  = SparseMatrix.fromTensor T'
 
-val _ = putStrLn TextIO.stdOut ("sparse slice column " ^ (Int.toString 0) ^ ": ")
+val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString 0) ^ ": ")
 val _  = TensorFile.realTensorWrite (TextIO.stdOut) (SparseMatrix.slice (ST,1,0))
 
-val _ = putStrLn TextIO.stdOut ("sparse slice column " ^ (Int.toString 1) ^ ": ")
+val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString 1) ^ ": ")
 val _  = TensorFile.realTensorWrite (TextIO.stdOut) (SparseMatrix.slice (ST,1,1))
 
-val _ = putStrLn TextIO.stdOut ("sparse slice column " ^ (Int.toString 9) ^ ": ")
+val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString 9) ^ ": ")
 val _  = TensorFile.realTensorWrite (TextIO.stdOut) (SparseMatrix.slice (ST,1,9))
 
 
-val _ = putStrLn TextIO.stdOut "insert:"
+val _ = putStrLn TextIO.stdOut "SparseTensor insert:"
 val S    = SparseTensor.new ([4,4],0.0)
 val ones = RTensor.new ([2,2],1.0)
 val twos = RTensor.new ([2,2],2.0)

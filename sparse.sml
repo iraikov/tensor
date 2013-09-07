@@ -137,8 +137,8 @@ structure SparseIndex =
     struct
 
 	type t = int list
-        type iarray = IntArray.array
-        type nonzero = { indptr: iarray, indices: iarray }
+        type array = IntArray.array
+        type nonzero = { indptr: array, indices: array }
 	type indexer = t -> int option
         datatype storage = CSR | CSC
                             
@@ -260,7 +260,8 @@ struct
     type index   = Index.t
     type nonzero = Index.nonzero
     type elem    = Number.t
-    type matrix  = {shape: index, nz: nonzero, data: elem array}
+    type block   = {offset: index, shape: index, nz: nonzero, data: elem array}
+    type matrix  = {shape: index, blocks: block list}
 
     exception Data
     exception Shape
@@ -280,9 +281,13 @@ struct
 
     (* --- CONSTRUCTORS --- *)
 
-    fun fromTensor (a: Tensor.tensor) = 
+    fun fromTensor shape (a: Tensor.tensor, offset: index option) = 
         (let 
-            val shape as [rows,cols] = Tensor.shape a
+             val shape_a = Tensor.shape a 
+             val (rows,cols) =
+                 case shape_a of
+                     [rows,cols] => (rows,cols)
+                   | _ => raise Shape
         in
             case Index.order of
                 Index.CSR => 
@@ -290,14 +295,18 @@ struct
                     val v0: (int * elem) list = []
 	            val data: ((int * elem) list) Array.array  = Array.array(rows,v0)
                     val nzcount = ref 0
-                    val _ = Tensor.Index.app shape
+                    val _ = Tensor.Index.app shape_a
                                               (fn (i) => 
                                                   let 
                                                       val v = Tensor.sub (a, i)
                                                   in
                                                       if not (Number.== (v, Number.zero))
                                                       then
-                                                          let val [irow,icol] = i
+                                                          let 
+                                                              val (irow,icol) = 
+                                                                  case i of 
+                                                                      [irow,icol] => (irow,icol)
+                                                                    | _ => raise Match
                                                               val row  = Array.sub (data, irow)
                                                               val row' = (icol,v) :: row
                                                           in
@@ -322,7 +331,9 @@ struct
                                           (update (indptr,n,i); i')
                                       end)
                                   0 data;
-                     {shape=shape, nz={ indptr= indptr, indices=indices }, data=data'}
+                     {shape=shape, 
+                      blocks=[{offset = case offset of NONE => [0,0] | SOME i => i, 
+                               shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
                      )
                 end
               | Index.CSC =>
@@ -330,14 +341,18 @@ struct
                     val v0: (int * elem) list = []
 	            val data: ((int * elem) list) Array.array  = Array.array(cols,v0)
                     val nzcount = ref 0
-                    val _ = Tensor.Index.app shape
+                    val _ = Tensor.Index.app shape_a
                                       (fn (i) => 
                                           let 
                                               val v = Tensor.sub (a, i)
                                           in
                                               if not (Number.== (v, Number.zero))
                                               then
-                                                  let val [irow,icol] = i
+                                                  let 
+                                                      val (irow,icol) = 
+                                                          case i of 
+                                                              [irow,icol] => (irow,icol)
+                                                            | _ => raise Match
                                                       val col  = Array.sub (data, icol)
                                                       val col' = (irow,v) :: col
                                                   in
@@ -362,80 +377,127 @@ struct
                                           (update (indptr,n,i); i')
                                       end)
                                   0 data;
-                     {shape=shape, nz={ indptr= indptr, indices=indices }, data=data'}
+                     {shape=shape,
+                      [{offset=case offset of NONE => [0, 0] | SOME i => i, 
+                        shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
                      )
                 end
         end)
                   
+    (* Builds a sparse matrix from a list of the form:
+  
+       ([xoffset,yoffset],tensor) ...
+
+     where xoffset and yoffset are the positions where to insert the
+     given tensor. The tensors to be inserted must be non-overlapping.
+    *)
+
+    fun fromTensorList shape (al: (index * Tensor.tensor) list) = 
+        {shape=shape,  blocks=List.concate (map (fn (a) => #blocks (fromTensor shape a)) al)}
+
+*)                  
 
     (* --- ACCESSORS --- *)
 
-    fun shape {shape, nz, data} = shape
+    fun shape {shape, blocks} = shape
 
-    fun sub ({shape, nz, data},index as [i,j]) =
-        (case Index.toInt shape nz [i,j] of
-             SOME n => Array.sub (data, n)
-           | NONE => Number.zero)
+    fun sub ({shape, blocks},index) =
+        let
+            val (i,j) = case index of 
+                            [i,j] => (i,j)
+                          | _ => raise Index
+            val res = ref Number.zero
+        in
+            (List.find
+                (fn ({offset=(m,n), shape, nz, data}) =
+                    (case Index.toInt shape nz [i-m,j-n] of
+                         SOME n => (res := SOME (Array.sub (data, n)); true)
+                       | NONE => false)
+                  end)
+                blocks;
+             !res)
+        end
+
+    fun update ({shape,blocks},index,new) =
+        let
+            val (i,j) = case index of 
+                            [i,j] => (i,j)
+                          | _ => raise Index
+        in
+            (List.find
+                (fn ({offset=(m,n), shape, nz, data}) =
+                    (case Index.toInt shape nz [i-m,j-n] of
+                         SOME n => (Array.update (data, n, new); true)
+                       | NONE => false))
+             blocks; ())
+        end
 
 
-    fun update ({shape, nz, data},index as [i,j],new) =
-        (case Index.toInt shape nz [i,j] of
-             SOME n => Array.update (data, n, new)
-           | NONE => raise Data)
-
-    fun slice ({shape as [m,n], nz={indptr, indices}, data},axis,i) =
-        (case (Index.order,axis) of
-             (Index.CSC,1) => (let val s   = IntArray.sub (indptr, i)
-                                   val e   = (if i<(m-1) then IntArray.sub (indptr, i+1) else Array.length data)
-                                   val len = e-s
-                                   val res = RNumberArray.array (len, Number.zero)
-                                   fun loop (i,n) = if i < e 
-                                                    then (RNumberArray.update (res,n,Array.sub (data,i));
-                                                          loop (i+1,n+1))
-                                                    else ()
-                               in
-                                   loop (s,0);
-                                   Tensor.fromArray ([len,1],res)
-                               end)
-           | (Index.CSR,0) => (let val s   = IntArray.sub (indptr, i)
-                                   val e   = (if i<(m-1) then IntArray.sub (indptr, i+1) else Array.length data)
-                                   val len = e-s
-                                   val res = RNumberArray.array (len, Number.zero)
-                                   fun loop (i,n) = if i < e 
-                                                    then (RNumberArray.update (res,n,Array.sub (data,i));
-                                                          loop (i+1,n+1))
-                                                    else ()
-                               in
-                                   loop (s,0);
-                                   Tensor.fromArray ([1,len],res)
-                               end)
-           | (Index.CSC,0) => (let val vs = IntArray.foldri
-                                                (fn (n,ii,ax) =>  if ii=i then Array.sub(data,n)::ax else ax)
-                                                [] indices
-                                   val len = List.length vs
-                               in
-                                   Tensor.fromList ([1,len],vs)
-                               end)
-           | (Index.CSR,1) => (let val vs = IntArray.foldri
-                                                (fn (n,ii,ax) =>  if ii=i then Array.sub(data,n)::ax else ax)
-                                                [] indices
-                                   val len = List.length vs
-                               in
-                                   Tensor.fromList ([len,1],vs)
-                               end)
-           | (_,_) => raise Index
-        )
+    fun slice ({shape,blocks},axis,i) =
+        let
+            val (m,n) = case shape of
+                            [m,n] => (m,n)
+                          | _ => raise Shape
+        in
+            List.find
+            (fn ({offset={u,v}, shape, nz={indptr, indices}, data}) =>
+                (case (Index.order,axis) of
+                     (Index.CSC,1) => (let val s   = IntArray.sub (indptr, i)
+                                           val e   = (if i<(m-1) then IntArray.sub (indptr, i+1) else Array.length data)
+                                           val len = e-s
+                                           val res = RNumberArray.array (len, Number.zero)
+                                           fun loop (i,n) = if i < e 
+                                                            then (RNumberArray.update (res,n,Array.sub (data,i));
+                                                                  loop (i+1,n+1))
+                                                            else ()
+                                       in
+                                           loop (s,0);
+                                           Tensor.fromArray ([1,len],res)
+                                       end)
+                   | (Index.CSR,0) => (let val s   = IntArray.sub (indptr, i)
+                                           val e   = (if i<(m-1) then IntArray.sub (indptr, i+1) else Array.length data)
+                                           val len = e-s
+                                           val res = RNumberArray.array (len, Number.zero)
+                                           fun loop (i,n) = if i < e 
+                                                            then (RNumberArray.update (res,n,Array.sub (data,i));
+                                                                  loop (i+1,n+1))
+                                                            else ()
+                                       in
+                                           loop (s,0);
+                                           Tensor.fromArray ([1,len],res)
+                                       end)
+                   | (Index.CSC,0) => (let val vs = IntArray.foldri
+                                                        (fn (n,ii,ax) =>  if ii=i then Array.sub(data,n)::ax else ax)
+                                                        [] indices
+                                           val len = List.length vs
+                                       in
+                                           Tensor.fromList ([1,len],vs)
+                                       end)
+                   | (Index.CSR,1) => (let val vs = IntArray.foldri
+                                                        (fn (n,ii,ax) =>  if ii=i then Array.sub(data,n)::ax else ax)
+                                                        [] indices
+                                           val len = List.length vs
+                                       in
+                                           Tensor.fromList ([1,len],vs)
+                                       end)
+                   | (_,_) => raise Index))
+            blocks
+            
+                                    
+        end
 
 
     (* --- MAPPING --- *)
 
-    fun map f {shape, nz, data} =
-        {shape=shape, nz=nz, data=array_map f data}
+    fun map f {shape, blocks} =
+        {shape=shape,
+         blocks=(List.map 
+                     (fn {offset, shape, nz, data} =>
+                         {offset=offset, shape=shape, nz=nz, data=array_map f data})
+                     blocks)}
 
-    fun app f {shape, nz, data} = Array.app f data
-
-    fun map f {shape, nz, data} =
-        {shape=shape, nz=nz, data=array_map f data}
+    fun app f {shape, blocks} = 
+        List.app (fn {offset, shape, nz, data} => Array.app f data) blocks
 
 
     (* --- BINOPS --- *)
@@ -473,8 +535,6 @@ signature MONO_SPARSE_TENSOR =
 	val sub : tensor * index -> elem
 	val update : tensor * index * elem -> unit
         val insert :  tensor * Tensor.tensor * index -> tensor
-
-	val slice : ((index * index) * tensor) -> TensorSlice.slice list
 
 	val map : (elem -> elem) -> tensor -> Tensor.tensor list
 	val app : (elem -> unit) -> tensor -> unit
@@ -576,23 +636,5 @@ struct
                  
     fun app f ({shape, nz, default}: tensor) =
         List.app (fn (b) => Tensor.app f (#data b)) nz
-
-    fun slice ((i,j),{shape, nz, default}: tensor) = 
-        let
-            fun slice' (b::rst, ax) =
-                let 
-                    val bi = Range.first (#r b)
-                    val bj = Range.last (#r b)
-                    val si = Index.-(i,bi)
-                    val sj = Index.-(j,bj)
-                in
-                    if Index.>= (i, bi) orelse Index.<= (j, bj)
-                    then slice' (rst, (RTensorSlice.slice ([(si,sj)],(#data b)))::ax)
-                    else slice' (rst, ax)
-                end
-                | slice' ([],ax) = ax
-        in
-            slice' (nz, [])
-        end
                 
 end

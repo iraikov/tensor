@@ -25,11 +25,6 @@ conditions are met:
 structure TensorTest =
 struct
 
-val N1 = 8
-val N2 = 2
-val N3 = 10
-val N =  N1+N2
-
 fun putStrLn (file, str) = 
     (TextIO.output (file, str);
      TextIO.output (file, "\n"))
@@ -39,6 +34,33 @@ fun putStr (file, str) =
 
 
 
+
+val _ = print "fromList: "
+
+val A = RTensor.fromList ([4,2],List.tabulate (8, fn i => Real.fromInt i))
+val _ = TensorFile.realTensorWrite (TextIO.stdOut) A
+val v = RTensor.sub (A,[0,0])
+val _ = (print "A(0,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (A,[0,1])
+val _ = (print "A(0,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (A,[1,0])
+val _ = (print "A(1,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (A,[1,1])
+val _ = (print "A(1,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (A,[2,0])
+val _ = (print "A(2,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (A,[2,1])
+val _ = (print "A(2,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (A,[3,0])
+val _ = (print "A(3,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
+val v = RTensor.sub (A,[3,1])
+val _ = (print "A(3,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
+
+val _ = print "slice: "
+val sl = RTensorSlice.slice ([([3,0],[3,1]),([1,0],[1,1])],A)
+val _  = TensorFile.realTensorWrite (TextIO.stdOut) (RTensorSlice.map (fn (x) => x) sl)
+
+val _ = print "realRandomTensor: "
 
 fun realRandomTensor (xseed,yseed) shape =
     let 
@@ -52,7 +74,10 @@ fun realRandomTensor (xseed,yseed) shape =
         loop (length - 1)
     end
 
-
+val N1 = 8
+val N2 = 2
+val N3 = 10
+val N =  N1+N2
 
 val SN1 = (RTensor.*> 0.5 (realRandomTensor (13,17) [N,N1]) )
 val SN2 = (RTensor.~ (realRandomTensor (19,23) [N,N2]))

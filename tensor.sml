@@ -472,7 +472,7 @@ signature RANGE =
 	val last : t -> index
 
 	val length : t -> int
-	val shape : t -> index
+	val shapes : t -> index list
 	val inRange : t -> index -> bool
 	val next : t -> index -> index option
 	val prev : t -> index -> index option
@@ -695,7 +695,11 @@ struct
 	    if (Index.validShape shape) andalso (Index.validIndex lo) andalso (Index.validIndex up) andalso
                (Index.inBounds shape lo) andalso (Index.inBounds shape up) andalso Index.< (lo,up)
             then
-		RangeIn(shape,lo,up)
+                let
+                    val shape' = ListPair.map (fn (x,y) => y-x+1) (lo,up)
+                in
+		    RangeIn(shape,lo,up)
+                end
 	    else
 		RangeEmpty
 
@@ -723,8 +727,21 @@ struct
             in 
                 case set of
                     []        => RangeEmpty
-                  | [(lo,up)] => RangeIn (shape,lo,up)
-                  | _         => RangeSet (shape,set)
+                  | [(lo,up)] => 
+                    let
+                        val shape' = ListPair.map (fn (x,y) => y-x+1) (lo,up)
+                    in
+                        RangeIn (shape,lo,up)
+                    end
+                  | _         => 
+                    let
+                        val shapes = List.map (fn (lo,up) => (ListPair.map (fn (x,y) => y-x+1) (lo,up))) set
+                        val shape' = List.foldl (fn(s,ax) => (ListPair.map (fn (x,y) => x+y) (s, ax))) 
+                                                (hd shapes) 
+                                                (tl shapes)
+                    in
+                        RangeSet (shape,set)
+                    end
             end
 
 	fun length RangeEmpty = 0
@@ -738,15 +755,15 @@ struct
                       0 set
 	    end
  
-	fun shape RangeEmpty = []
-	  | shape (RangeIn(shape,lo,up)) =
-	    let fun diff (x,y) = (y-x+1) in
-		ListPair.map diff (lo,up)
+	fun shapes RangeEmpty = []
+	  | shapes (RangeIn(shape,lo,up)) =
+	    let fun diff (x,y) = (y-x+1) 
+            in
+		[ListPair.map diff (lo,up)]
 	    end
-	  | shape (RangeSet(shape,set)) =
+	  | shapes (RangeSet(shape,set)) =
 	    let fun diff (x,y) = (y-x+1) in
-		foldl (fn ((lo,up),ax) => ListPair.map (op +) ((ListPair.map diff (lo,up)), ax))
-                      (List.map (fn (x) => 0) shape) set
+		List.map (fn (lo,up) => ListPair.map diff (lo,up)) set
 	    end
  
 
@@ -1002,7 +1019,7 @@ signature TENSOR_SLICE =
 
         val length : 'a slice -> int
         val base   : 'a slice -> 'a tensor
-        val shape  : 'a slice -> (index)
+        val shapes : 'a slice -> index list
         val range  : 'a slice -> (range)
 
         val app : ('a -> unit) -> 'a slice -> unit
@@ -1270,13 +1287,13 @@ structure TensorSlice : TENSOR_SLICE =
         type range = Range.t
         type 'a tensor = 'a Tensor.tensor
 
-        type 'a slice = {range : range, shape: index, tensor : 'a tensor}
+        type 'a slice = {range : range, shapes: index list, tensor : 'a tensor}
 
         fun fromto (lo,up,tensor) =
             let val r = Range.fromto (Tensor.shape tensor) (lo,up)
             in
                 {range=r,
-                 shape=(Range.shape r),
+                 shapes=(Range.shapes r),
                  tensor=tensor}
             end
 
@@ -1284,46 +1301,48 @@ structure TensorSlice : TENSOR_SLICE =
             let val r = (Range.ranges (Tensor.shape tensor) rs)
             in
                 {range=r,
-                 shape=(Range.shape r),
+                 shapes=(Range.shapes r),
                  tensor=tensor}
             end
 
-        fun length ({range, shape, tensor}) = Range.length range
-        fun base ({range, shape, tensor}) = tensor
-        fun shape ({range, shape, tensor}) = Range.shape range
-        fun range ({range, shape, tensor}) = range
+        fun length ({range, shapes, tensor}) = Range.length range
+        fun base ({range, shapes, tensor})   = tensor
+        fun shapes ({range, shapes, tensor}) = shapes
+        fun range ({range, shapes, tensor})  = range
 
         fun map f slice = 
         let
-           val te  = #tensor slice
-           val ra  = #range slice
+           val te    = base slice
+           val ra    = range slice
+           val len   = length slice
            val fndx  = Range.first ra
-           val arr = Array.array(length(slice),f (Tensor.sub(te,fndx)))
-           val i   = ref 0
+           val arr   = Array.array (length slice, f (Tensor.sub (te,fndx)))
+           val i     = ref 0
         in 
            Range.iteri (fn (ndx) => let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
-           Tensor.fromArray ((#shape slice), arr)
+           Tensor.fromArray ([1,len], arr)
         end
 
         fun app f (slice: 'a slice) = 
         let
-           val te  = #tensor slice
-           val ra  = #range slice
-           val fndx  = Range.first ra
+           val te   = base slice
+           val ra   = range slice
+           val fndx = Range.first ra
         in 
            Range.iteri (fn (ndx) => (f (Tensor.sub (te,ndx)); true)) ra; ()
         end
 
         fun map2 f (sl1: 'a slice) (sl2: 'b slice) = 
         let
-           val _      = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
-           val te1    = #tensor sl1
-           val te2    = #tensor sl2
-           val ra1    = #range sl1
-           val ra2    = #range sl2
+           val _      = if not ((shapes sl1) = (shapes sl2)) then raise Index.Shape else ()
+           val te1    = base sl1
+           val te2    = base sl2
+           val ra1    = range sl1
+           val ra2    = range sl2
+           val len    = length sl1
            val fndx1  = Range.first ra1
            val fndx2  = Range.first ra2
-           val arr    = Array.array(length(sl1),f (Tensor.sub(te1,fndx1),Tensor.sub(te2,fndx2)))
+           val arr    = Array.array (length(sl1), f (Tensor.sub(te1,fndx1),Tensor.sub(te2,fndx2)))
            val i      = ref 0
         in 
             Range.iteri2 (fn (ndx,ndx') => 
@@ -1331,23 +1350,24 @@ structure TensorSlice : TENSOR_SLICE =
                                  val v = f (Tensor.sub (te1,ndx),Tensor.sub (te2,ndx')) 
                              in 
                                  (Array.update (arr, !i, v); i := (!i + 1); true) 
-                             end) (ra1,ra2);
-           Tensor.fromArray ((#shape sl1), arr)
+                             end) 
+                         (ra1,ra2);
+           Tensor.fromArray ([1,len], arr)
         end
 
         fun foldl f init (slice: 'a slice) = 
         let
-           val te     = #tensor slice
+           val te     = base slice
            val sh     = Tensor.shape te
            val arr    = Tensor.toArray te
-           val ra     = #range slice
+           val ra    = range slice
         in 
-           Range.foldi_range
-               (fn ((i,j),ax) => 
-                   Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
-                               fn (n,ax) => f (Array.sub (arr,n),ax), 
-                               ax))
-               init ra
+            Range.foldi_range
+                (fn ((i,j),ax) => 
+                    Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                             fn (n,ax) => f (Array.sub (arr,n),ax), 
+                                ax))
+                init ra
         end
 
     end                                
@@ -1469,8 +1489,8 @@ signature MONO_TENSOR_SLICE =
 
         val length : slice -> int
         val base   : slice -> tensor
-        val shape  : slice -> (index)
-        val range  : slice -> (range)
+        val shapes : slice -> index list
+        val range  : slice -> range
 
         val app : (elem -> unit) -> slice -> unit
         val map : (elem -> elem) -> slice -> tensor
@@ -2340,16 +2360,21 @@ structure MonoTensor  =
             end
     in
         fun +* ta tb =
-            let val (rank_a,lk::rest_a,a) = (rank ta, shape ta, toArray ta)
-                val (rank_b,lk2::rest_b,b) = (rank tb, shape tb, toArray tb)
-            in if not(lk = lk2)
-               then raise Match
-               else let val li = Index.length rest_a
-                        val lj = Index.length rest_b
-                        val c = Array.array(li*lj,Number.zero)
-                    in fromArray(rest_a @ rest_b,
-                                 do_fold_first a b c lk li lj)
-                    end
+            let 
+                val (rank_a,a) = (rank ta, toArray ta)
+                val (rank_b,b) = (rank tb, toArray tb)
+            in 
+                case (shape ta, shape tb) of
+                    (lk::rest_a,lk2::rest_b) =>
+                    (if not(lk = lk2)
+                     then raise Match
+                     else let val li = Index.length rest_a
+                              val lj = Index.length rest_b
+                              val c = Array.array(li*lj,Number.zero)
+                          in fromArray(rest_a @ rest_b,
+                                       do_fold_first a b c lk li lj)
+                          end)
+                  | _ => raise Match
             end
     end
     local
@@ -2390,16 +2415,18 @@ structure MonoTensor  =
         fun *+ ta tb  =
             let val (rank_a,shape_a,a) = (rank ta, shape ta, toArray ta)
                 val (rank_b,shape_b,b) = (rank tb, shape tb, toArray tb)
-                val (lk::rest_a) = List.rev shape_a
-                val (lk2::rest_b) = List.rev shape_b
-            in if not(lk = lk2)
-               then raise Match
-               else let val li = Index.length rest_a
-                        val lj = Index.length rest_b
-                        val c = Array.array(li*lj,Number.zero)
-                    in fromArray(List.rev rest_a @ List.rev rest_b,
-                                 do_fold_last a b c lk li lj)
-                    end
+            in 
+                case (List.rev (shape_a), List.rev (shape_b)) of
+                    (lk::rest_a,lk2::rest_b) =>
+                    (if not(lk = lk2)
+                     then raise Match
+                     else let val li = Index.length rest_a
+                              val lj = Index.length rest_b
+                              val c = Array.array(li*lj,Number.zero)
+                          in fromArray(List.rev rest_a @ List.rev rest_b,
+                                       do_fold_last a b c lk li lj)
+                          end)
+                    | _ => raise Match
             end
     end
         (* ALGEBRAIC OPERATIONS *)
@@ -2715,16 +2742,20 @@ structure MonoTensor  =
             end
     in
         fun +* ta tb =
-            let val (rank_a,lk::rest_a,a) = (rank ta, shape ta, toArray ta)
-                val (rank_b,lk2::rest_b,b) = (rank tb, shape tb, toArray tb)
-            in if not(lk = lk2)
-               then raise Match
-               else let val li = Index.length rest_a
-                        val lj = Index.length rest_b
-                        val c = Array.array(li*lj,Number.zero)
-                    in fromArray(rest_a @ rest_b,
-                                 do_fold_first a b c lk li lj)
-                    end
+            let val (rank_a,a) = (rank ta, toArray ta)
+                val (rank_b,b) = (rank tb, toArray tb)
+            in 
+                case (shape ta, shape tb) of
+                    (lk::rest_a,lk2::rest_b) =>
+                    (if not(lk = lk2)
+                     then raise Match
+                     else let val li = Index.length rest_a
+                              val lj = Index.length rest_b
+                              val c = Array.array(li*lj,Number.zero)
+                          in fromArray(rest_a @ rest_b,
+                                       do_fold_first a b c lk li lj)
+                          end)
+                    | _ => raise Match
             end
     end
     local
@@ -2765,16 +2796,18 @@ structure MonoTensor  =
         fun *+ ta tb  =
             let val (rank_a,shape_a,a) = (rank ta, shape ta, toArray ta)
                 val (rank_b,shape_b,b) = (rank tb, shape tb, toArray tb)
-                val (lk::rest_a) = List.rev shape_a
-                val (lk2::rest_b) = List.rev shape_b
-            in if not(lk = lk2)
-               then raise Match
-               else let val li = Index.length rest_a
-                        val lj = Index.length rest_b
-                        val c = Array.array(li*lj,Number.zero)
-                    in fromArray(List.rev rest_a @ List.rev rest_b,
-                                 do_fold_last a b c lk li lj)
-                    end
+            in 
+                case (List.rev (shape_a), List.rev (shape_b)) of
+                    (lk::rest_a,lk2::rest_b) =>
+                    (if not(lk = lk2)
+                     then raise Match
+                     else let val li = Index.length rest_a
+                              val lj = Index.length rest_b
+                              val c = Array.array(li*lj,Number.zero)
+                          in fromArray(List.rev rest_a @ List.rev rest_b,
+                                       do_fold_last a b c lk li lj)
+                          end)
+                  | _ => raise Match
             end
     end
         (* ALGEBRAIC OPERATIONS *)
@@ -3022,15 +3055,19 @@ structure MonoTensor  =
             end
     in
         fun +* ta tb =
-            let val (rank_a,lk::rest_a,a) = (rank ta, shape ta, toArray ta)
-                val (rank_b,lk2::rest_b,b) = (rank tb, shape tb, toArray tb)
-            in if not(lk = lk2)
-               then raise Match
-               else let val li = Index.length rest_a
-                        val lj = Index.length rest_b
-                        val c = Array.array(li*lj,Number.zero)
-                    in fromArray(rest_a @ rest_b, do_fold_first a b c lk li lj)
-                    end
+            let val (rank_a,a) = (rank ta, toArray ta)
+                val (rank_b,b) = (rank tb, toArray tb)
+            in 
+                case (shape ta, shape tb) of
+                    (lk::rest_a,lk2::rest_b) =>
+                    (if not(lk = lk2)
+                     then raise Match
+                     else let val li = Index.length rest_a
+                              val lj = Index.length rest_b
+                              val c = Array.array(li*lj,Number.zero)
+                          in fromArray(rest_a @ rest_b, do_fold_first a b c lk li lj)
+                          end)
+                    | _ => raise Match
             end
     end
     local
@@ -3076,19 +3113,20 @@ structure MonoTensor  =
         fun *+ ta tb  =
             let val (rank_a,shape_a,a) = (rank ta, shape ta, toArray ta)
                 val (rank_b,shape_b,b) = (rank tb, shape tb, toArray tb)
-                val (lk::rest_a) = (List.rev shape_a) 
-                val (lk2::rest_b) = (List.rev shape_b) 
             in
-                if not(lk = lk2) then
-                    raise Match
-                else
-                    let val li = Index.length rest_a
-                        val lj = Index.length rest_b
-                        val c = Array.array(li*lj,Number.zero)
-                    in
-                        fromArray(List.rev rest_a @ List.rev rest_b,
-                                  do_fold_last a b c lk li lj)
-                    end
+                case (List.rev (shape_a), List.rev (shape_b)) of
+                    (lk::rest_a,lk2::rest_b) =>
+                    (if not(lk = lk2) then
+                         raise Match
+                     else
+                         let val li = Index.length rest_a
+                             val lj = Index.length rest_b
+                             val c = Array.array(li*lj,Number.zero)
+                         in
+                             fromArray(List.rev rest_a @ List.rev rest_b,
+                                       do_fold_last a b c lk li lj)
+                         end)
+                  | _ => raise Match
             end
     end
     (* ALGEBRAIC OPERATIONS *)
@@ -3154,47 +3192,49 @@ structure RTensorSlice =
         type range = Range.t
         type tensor = RTensor.tensor
 
-        type slice = {range : range, shape: index, tensor : tensor}
+        type slice = {range : range, shapes: index list, tensor : tensor}
 
         fun fromto (lo,up,tensor) =
             let val r = Range.fromto (Tensor.shape tensor) (lo,up)
             in
                 {range=r,
-                 shape=(Range.shape r),
+                 shapes=(Range.shapes r),
                  tensor=tensor}
             end
 
         fun slice (rs,tensor) =
-            let val r = (Range.ranges (Tensor.shape tensor) rs)
+            let 
+                val r = (Range.ranges (Tensor.shape tensor) rs)
             in
                 {range=r,
-                 shape=(Range.shape r),
+                 shapes=(Range.shapes r),
                  tensor=tensor}
             end
 
-        fun length ({range, shape, tensor}) = Range.length range
-        fun base ({range, shape, tensor})   = tensor
-        fun shape ({range, shape, tensor})  = Range.shape range
-        fun range ({range, shape, tensor})  = range
+        fun length ({range, shapes, tensor})  = Range.length range
+        fun base ({range, shapes, tensor})    = tensor
+        fun shapes ({range, shapes, tensor}) = shapes
+        fun range ({range, shapes, tensor})   = range
 
         fun map f slice = 
         let
-           val te    = #tensor slice
-           val ra    = #range slice
+           val te    = base slice
+           val ra    = range slice
            val fndx  = Range.first ra
-           val arr   = Array.array(length(slice),f (Tensor.sub(te,fndx)))
+           val len   = length (slice)
+           val arr   = Array.array(len, f (Tensor.sub(te,fndx)))
            val i     = ref 0
         in 
            
            Range.iteri (fn (ndx) => 
                          let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
-           RTensor.fromArray ((#shape slice), arr)
+           RTensor.fromArray ([1,len], arr)
         end
 
         fun app f (slice: slice) = 
         let
-           val te  = #tensor slice
-           val ra  = #range slice
+           val te    = base slice
+           val ra    = range slice
            val fndx  = Range.first ra
         in 
            Range.iteri (fn (ndx) => (f (Tensor.sub (te,ndx)); true)) ra; ()
@@ -3202,11 +3242,12 @@ structure RTensorSlice =
 
         fun map2 f (sl1: slice) (sl2: slice) = 
         let
-           val _      = if not ((#shape sl1) = (#shape sl2)) then raise Index.Shape else ()
-           val te1    = #tensor sl1
-           val te2    = #tensor sl2
-           val ra1    = #range sl1
-           val ra2    = #range sl2
+           val _      = if not ((shapes sl1) = (shapes sl2)) then raise Index.Shape else ()
+           val te1    = base sl1
+           val te2    = base sl2
+           val ra1    = range sl1
+           val ra2    = range sl2
+           val len    = length sl1
            val fndx1  = Range.first ra1
            val fndx2  = Range.first ra2
            val arr    = Array.array (length(sl1), f (Tensor.sub(te1,fndx1), Tensor.sub(te2,fndx2)))
@@ -3219,20 +3260,20 @@ structure RTensorSlice =
                                 (Array.update (arr, !i, v); i := (!i + 1); true) 
                             end)
                         (ra1,ra2);
-           RTensor.fromArray ((#shape sl1), arr)
+           RTensor.fromArray ([1,len], arr)
         end
 
         fun foldl f init (slice: slice) = 
         let
-           val te     = #tensor slice
+           val te     = base slice
            val sh     = Tensor.shape te
            val arr    = Tensor.toArray te
-           val ra     = #range slice
+           val ra     = range slice
         in 
             Range.foldi_range
                 (fn ((i,j),ax) => 
                     Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
-                                fn (n,ax) => f (Array.sub (arr,n),ax), 
+                             fn (n,ax) => f (Array.sub (arr,n),ax), 
                                 ax))
                 init ra
         end
@@ -3350,9 +3391,9 @@ fun complexTensorLineWrite file x = (TextIO.output (file, "["); listLineWrite IN
                                      CTensor.app (fn x => (TextIO.output (file, (" " ^ (CNumber.toString x))))) x)
 
 fun realTensorSliceWrite file x = 
-    (intListWrite file (RTensorSlice.shape x); RTensorSlice.app (fn x => (realWrite file x)) x)
+    (List.app (fn (l) => intListWrite file l) (RTensorSlice.shapes x); RTensorSlice.app (fn x => (realWrite file x)) x)
 fun realTensorSliceLineWrite file x = 
-    (TextIO.output (file, "["); listLineWrite INumber.toString file (RTensorSlice.shape x); TextIO.output (file, " ]"); 
+    (List.app (fn (l) => (TextIO.output (file, "["); listLineWrite INumber.toString file l; TextIO.output (file, " ]"))) (RTensorSlice.shapes x); 
      RTensorSlice.app (fn x => (TextIO.output (file, (" " ^ (RNumber.toString x))))) x;
      putStrLn (TextIO.stdOut, ""))
 

@@ -417,9 +417,9 @@ structure Index : INDEX =
 	fun iterator a inner =
 	    let fun loop accum f =
 		let fun innerloop i =
-		    case i < a of
-			true => (inner (i::accum) f; innerloop (i+1))
-		      | false => ()
+		        case i < a of
+			    true => (inner (i::accum) f; innerloop (i+1))
+		          | false => ()
 		in innerloop 0
 		end
 	    in loop
@@ -427,9 +427,9 @@ structure Index : INDEX =
 	fun build_iterator [a] =
 	    let fun loop accum f =
 		let fun innerloop i =
-		    case i < a of
-			true => (f (i::accum); innerloop (i+1))
-		      | false => ()
+		        case i < a of
+			    true => (f (i::accum); innerloop (i+1))
+		          | false => ()
 		in innerloop 0
 		end
 	    in loop
@@ -3376,6 +3376,8 @@ fun complexListLineWrite file x = (listLineWrite CNumber.toString file x; TextIO
 fun intListWrite file x = listWrite INumber.toString file x
 fun realListWrite file x = listWrite RNumber.toString file x
 fun complexListWrite file x = listWrite CNumber.toString file x
+
+fun intArrayWrite file x = (IntArray.app (fn x => (intWrite file x)) x)
 
 fun intTensorWrite file x = (intListWrite file (ITensor.shape x); ITensor.app (fn x => (intWrite file x)) x)
 fun realTensorWrite file x = (intListWrite file (RTensor.shape x); RTensor.app (fn x => (realWrite file x)) x)

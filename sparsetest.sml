@@ -25,7 +25,6 @@ fun putStrLn out str =
     (TextIO.output (out, str);
      TextIO.output (out, "\n"))
 
-val N = 10
 
 fun realRandomTensor (xseed,yseed) shape =
     let 
@@ -38,24 +37,6 @@ fun realRandomTensor (xseed,yseed) shape =
     in 
         loop (length - 1)
     end
-
-
-val epsilon = 0.3
-val T  = realRandomTensor (13,17) [N,N]
-val T' = RTensor.map (fn (x) => (if Real.> (epsilon,x) then 1.0 else 0.0)) T
-val _  = TensorFile.realTensorWrite (TextIO.stdOut) T'
-
-val ST  = SparseMatrix.fromTensor T'
-
-val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString 0) ^ ": ")
-val _  = TensorFile.realTensorWrite (TextIO.stdOut) (SparseMatrix.slice (ST,1,0))
-
-val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString 1) ^ ": ")
-val _  = TensorFile.realTensorWrite (TextIO.stdOut) (SparseMatrix.slice (ST,1,1))
-
-val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString 9) ^ ": ")
-val _  = TensorFile.realTensorWrite (TextIO.stdOut) (SparseMatrix.slice (ST,1,9))
-
 
 val _ = putStrLn TextIO.stdOut "SparseTensor insert:"
 val S    = SparseTensor.new ([4,4],0.0)
@@ -98,3 +79,82 @@ val _ = (print "S(3,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
 val v = SparseTensor.sub (S,[3,3])
 val _ = (print "S(3,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
 
+val _ = putStrLn TextIO.stdOut "SparseTensor fromTensor:"
+
+val SA  = SparseMatrix.fromTensor
+              [6,6] 
+              (RTensor.fromList 
+                   ([6,6], 
+                    List.concat
+                    [
+                     [10.0,3.0,0.0,3.0,0.0,0.0],
+                     [0.0,9.0,7.0,0.0,8.0,4.0],
+                     [0.0,0.0,8.0,8.0,0.0,0.0],
+                     [0.0,0.0,7.0,7.0,9.0,0.0],
+                     [~2.0,0.0,0.0,5.0,9.0,2.0],
+                     [0.0,3.0,0.0,0.0,13.0,~1.0]
+                     ]), NONE)
+
+
+val _ = Loop.app
+            (0,6,fn (i) => 
+                    Loop.app (0,6,fn (j) => 
+                                     (
+                                      print ("SA(" ^ (Int.toString i) ^ "," ^ (Int.toString j) ^ ") = "); 
+                                      TensorFile.realWrite 
+                                          (TextIO.stdOut) 
+                                          (SparseMatrix.sub (SA,[i,j]))
+                                     )
+            ))
+
+val _ = Loop.app
+            (0,6,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (SA,1,i) 
+                    in
+                         List.app
+                             (fn (sl,si) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
+                                             TensorFile.intArrayWrite (TextIO.stdOut) si)) sl
+                    end)
+
+val blocks = #blocks SA
+
+val _ = putStrLn TextIO.stdOut "SparseTensor fromTensorList:"
+
+val SB = SparseMatrix.fromTensorList 
+             [10,10]
+             [
+              (RTensor.*> 0.2
+                       (RTensor.new ([3,8],1.0)),
+               [7,0]),
+              
+              (RTensor.*> 0.1 
+                       (RTensor.new ([7,8],1.0)),
+               [0,0])
+              
+             ]
+
+val blocks = #blocks SB
+val _ = Loop.app
+            (0,10,fn (j) => 
+                    Loop.app (0,10,fn (i) => 
+                                     (
+                                      print ("SA(" ^ (Int.toString i) ^ "," ^ (Int.toString j) ^ ") = "); 
+                                      TensorFile.realWrite 
+                                          (TextIO.stdOut) 
+                                          (SparseMatrix.sub (SB,[i,j]))
+                                     )
+            ))
+
+val _ = Loop.app
+            (0,10,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (SB,1,i) 
+                    in
+                         List.app 
+                             (fn (sl,si) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
+                                             TensorFile.intArrayWrite (TextIO.stdOut) si))
+                             sl
+                    end)

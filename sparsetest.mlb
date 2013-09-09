@@ -2,6 +2,7 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/unsafe.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 tensor.mlb
+DynArray.sml
 sparse.sml
 sparsetest.sml
 

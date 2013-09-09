@@ -26,6 +26,8 @@ fun putStrLn out str =
     (TextIO.output (out, str);
      TextIO.output (out, "\n"))
 
+
+
 signature SPARSE_INDEX =
     sig
         type t
@@ -256,6 +258,8 @@ struct
 
     (* --- LOCALS --- *)
 
+    fun dimVals [m,n] = (m,n) | dimVals _ = raise Shape
+
     fun array_map f a =
 	let fun apply index = f(Array.sub(a,index)) in
 	    Array.tabulate(Array.length a, apply)
@@ -269,9 +273,14 @@ struct
     fun findBlock (i,j,blocks) =
         let
             val block = List.find
-                            (fn ({offset=[u,v], shape=[t,s], nz, data}) =>
-                                 ((j>=v) andalso (j-v<s) andalso
-                                  (i>=u) andalso (i-u<t)))
+                            (fn ({offset=offset, shape=shape, nz, data}) =>
+                                let
+                                    val (u,v) = dimVals offset
+                                    val (t,s) = dimVals shape
+                                in
+                                    ((j>=v) andalso (j-v<s) andalso
+                                     (i>=u) andalso (i-u<t))
+                                end)
                             blocks
         in
             block
@@ -284,16 +293,14 @@ struct
     fun fromTensor shape (a: Tensor.tensor, offset) = 
         (let 
              val shape_a = Tensor.shape a 
-             val (rows,cols) =
-                 case shape_a of
-                     [rows,cols] => (rows,cols)
-                   | _ => raise Shape
+             val (rows,cols) = dimVals shape_a
         in
             case Index.order of
                 Index.CSC =>
                 let 
                     val v0: (int * elem) list = []
-	            val data: ((int * elem) list) Array.array  = Array.array(cols,v0)
+	            val data: (((int * elem) DynArray.array) option) Array.array  = 
+                        Array.array(cols,NONE)
                     val nzcount = ref 0
                     val _ = Tensor.Index.app (List.rev shape_a)
                                       (fn (i) => 
@@ -303,33 +310,35 @@ struct
                                               if not (Number.== (v, Number.zero))
                                               then
                                                   let 
-                                                      val (irow,icol) = 
-                                                          case i of 
-                                                              [irow,icol] => (irow,icol)
-                                                            | _ => raise Match
-                                                      val col  = Array.sub (data, icol)
-                                                      val col' = (irow,v) :: col
+                                                      val (irow,icol) = dimVals i
+                                                      val colv  = Array.sub (data, icol)
+                                                      (*val col' = (irow,v) :: col*)
                                                   in
-                                                      Array.update(data,icol,col');
-                                                      nzcount := (!nzcount) + 1
+                                                      (case colv of
+                                                          SOME col => 
+                                                          (DynArray.update(col,DynArray.length col,(irow,v)))
+                                                        | NONE => Array.update (data, icol, SOME (DynArray.fromList [(irow,v)]));
+                                                       nzcount := (!nzcount) + 1)
                                                   end
                                               else ()
                                           end)
-                    val data'   = Array.array (!nzcount, Number.zero)
-                    val indices = IntArray.array (!nzcount, 0)
+                    val data'   = Array.array (!nzcount+1, Number.zero)
+                    val indices = IntArray.array (!nzcount+1, 0)
                     val indptr  = IntArray.array (cols, 0)
                     val update  = Unsafe.IntArray.update
                 in
-                    (Array.foldli (fn (n,collist,i) => 
+                    (Array.foldli (fn (n,SOME cols,i) => 
                                       let 
-                                          val i' = List.foldr (fn ((rowind,v),i) => 
-                                                                  (Array.update (data',i,v); 
-                                                                   update (indices,i,rowind); 
-                                                                   i+1))
-                                                              i collist
+                                          val i' = DynArray.foldr
+                                                       (fn ((rowind,v),i) => 
+                                                           (Array.update (data',i,v); 
+                                                            update (indices,i,rowind); 
+                                                            i+1))
+                                                       i cols
                                       in
                                           (update (indptr,n,i); i')
-                                      end)
+                                      end
+                                   | (n,NONE,i) => i)
                                   0 data;
                      {shape=shape,
                       blocks=[{offset=case offset of NONE => [0, 0] | SOME i => i, 
@@ -339,7 +348,8 @@ struct
               | Index.CSR => 
                 let 
                     val v0: (int * elem) list = []
-	            val data: ((int * elem) list) Array.array  = Array.array(rows,v0)
+	            val data: (((int * elem) DynArray.array) option) Array.array  = 
+                        Array.array(rows,NONE)
                     val nzcount = ref 0
                     val _ = Tensor.Index.app shape_a
                                               (fn (i) => 
@@ -349,33 +359,34 @@ struct
                                                       if not (Number.== (v, Number.zero))
                                                       then
                                                           let 
-                                                              val (irow,icol) = 
-                                                                  case i of 
-                                                                      [irow,icol] => (irow,icol)
-                                                                    | _ => raise Match
-                                                              val row  = Array.sub (data, irow)
-                                                              val row' = (icol,v) :: row
+                                                              val (irow,icol) = dimVals i
+                                                              val rowv  = Array.sub (data, irow)
+                                                              (*val row' = (icol,v) :: row*)
                                                           in
-                                                              Array.update(data,irow,row');
-                                                              nzcount := (!nzcount) + 1
+                                                              (case rowv of
+                                                                   (*Array.update(data,irow,row');*)
+                                                                   SOME row => DynArray.update (row,DynArray.length row,(icol,v))
+                                                                 | NONE => Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
+                                                               nzcount := (!nzcount) + 1)
                                                           end
                                                       else ()
                                                   end)
-                    val data'   = Array.array (!nzcount, Number.zero)
-                    val indices = IntArray.array (!nzcount, 0)
+                    val data'   = Array.array (!nzcount+1, Number.zero)
+                    val indices = IntArray.array (!nzcount+1, 0)
                     val indptr  = IntArray.array (rows, 0)
                     val update  = Unsafe.IntArray.update
                 in
-                    (Array.foldli (fn (n,rowlist,i) => 
+                    (Array.foldli (fn (n,SOME rows,i) => 
                                       let 
-                                          val i' = List.foldr (fn ((colind,v),i) => 
-                                                                  (Array.update (data',i,v); 
-                                                                   update (indices,i,colind); 
-                                                                   i+1))
-                                                              i rowlist
+                                          val i' = DynArray.foldr (fn ((colind,v),i) => 
+                                                                      (Array.update (data',i,v); 
+                                                                       update (indices,i,colind); 
+                                                                       i+1))
+                                                                  i rows
                                       in
                                           (update (indptr,n,i); i')
-                                      end)
+                                      end
+                                  | (n,NONE,i) => i)
                                   0 data;
                      {shape=shape, 
                       blocks=[{offset = case offset of NONE => [0,0] | SOME i => i, 
@@ -384,22 +395,22 @@ struct
                 end
         end)
 
-        fun insert ({shape, blocks},t,[i,j]) =
+        fun insert ({shape, blocks},t,toffset) =
             let
+                val (i,j) = dimVals toffset
                 val {shape=_, blocks=bs} = fromTensor shape (t,SOME [i,j])
                 val b': block = case bs of
                                     [b] => b
                                   | _ => raise Match
-                val [m,n] = #shape b'
+                val (m,n) = dimVals (#shape b')
 
                 val blocks' = 
                     let
                         fun merge ([], []) = [b']
-                          | merge ((b as {offset,shape=[bm,bn],nz,data})::rst, ax) =
+                          | merge ((b as {offset=offset,shape=shape,nz,data})::rst, ax) =
                             let 
-                                val (bi,bj) = case (#offset b) of 
-                                                  [bi,bj] => (bi,bj)
-                                                | _ => raise Match
+                                val (bm,bn) = dimVals shape
+                                val (bi,bj) = dimVals offset
                             in
                                 if (j < bj)
                                 then List.rev (rst@(b::b'::ax))
@@ -440,15 +451,13 @@ struct
 
     fun sub ({shape, blocks},index) =
         let
-            val (i,j) = case index of 
-                            [i,j] => (i,j)
-                          | _ => raise Index
-
+            val (i,j) = dimVals index
             val block = findBlock (i,j,blocks)
         in
             case block of
-                SOME ({offset=[m,n], shape, nz, data}) => 
+                SOME ({offset, shape, nz, data}) => 
                 let 
+                    val (m,n) = dimVals offset
                     val p = Index.toInt shape nz [i-m,j-n]
                  in
                      case p of SOME p' => Array.sub (data, p')
@@ -459,16 +468,14 @@ struct
 
     fun update ({shape,blocks},index,new) =
         let
-            val (i,j) = case index of 
-                            [i,j] => (i,j)
-                          | _ => raise Index
-
-            val block =  findBlock (i,j,blocks)
+            val (i,j) = dimVals index
+            val block = findBlock (i,j,blocks)
         in
             case block of
-                SOME ({offset=[m,n], shape, nz, data}) => 
+                SOME ({offset, shape, nz, data}) => 
                 let
-                    val p = Index.toInt shape nz [i-m,j-n]
+                    val (m,n) = dimVals shape
+                    val p     = Index.toInt shape nz [i-m,j-n]
                 in
                     case p of SOME p' => Array.update (data, p', new) | NONE => ()
                 end
@@ -478,11 +485,16 @@ struct
     fun findBlocks (i,axis,blocks) =
         let
             val blocks' = List.mapPartial
-                            (fn (b as {offset=[u,v], shape=[t,s], nz, data}) =>
-                                (case axis of
-                                     1 => if ((i>=v) andalso (i-v<s)) then SOME b else NONE
-                                   | 0 => if ((i>=u) andalso (i-u<t)) then SOME b else NONE
-                                   | _ => raise Match))
+                            (fn (b as {offset=offset, shape=shape, nz, data}) =>
+                                let
+                                    val (u,v) = dimVals offset
+                                    val (t,s) = dimVals shape
+                                in
+                                    (case axis of
+                                         1 => if ((i>=v) andalso (i-v<s)) then SOME b else NONE
+                                       | 0 => if ((i>=u) andalso (i-u<t)) then SOME b else NONE
+                                       | _ => raise Match)
+                                end)
                             blocks
         in
             blocks'
@@ -490,9 +502,7 @@ struct
 
     fun slice ({shape,blocks},axis,i) =
         let
-            val (m,n) = case shape of
-                            [m,n] => (m,n)
-                          | _ => raise Shape
+            val (m,n) = dimVals shape
 
             val _ = case axis of
                         0 => if (i > m) then raise Index else ()
@@ -501,8 +511,11 @@ struct
                                                               
         in
             List.mapPartial
-            (fn ({offset=[u,v], shape=[m,n], nz={indptr, indices}, data})  =>
+            (fn ({offset=offset, shape=shape, nz={indptr, indices}, data})  =>
                 let 
+                    val (u,v) = dimVals offset
+                    val (m,n) = dimVals shape
+
                     val i'  = case axis of 1 => i-v | 0 => i-u | _ => raise Match
                 in
                 (case (Index.order,axis) of
@@ -605,11 +618,11 @@ signature MONO_SPARSE_TENSOR =
 
         val new: index * elem -> tensor
 
-	val shape : tensor -> index
+	val shape  : tensor -> index
         val length : tensor -> int
-        val rank : tensor -> int
+        val rank   : tensor -> int
 
-	val sub : tensor * index -> elem
+	val sub     : tensor * index -> elem
 	val update : tensor * index * elem -> unit
         val insert :  tensor * Tensor.tensor * index -> tensor
 

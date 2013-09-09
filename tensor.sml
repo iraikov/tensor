@@ -26,6 +26,25 @@ conditions are met:
 
 *)
 
+(*
+structure IntArray =
+    struct
+        open Array
+        type array = int array
+        type vector = int vector
+        type elem  = int
+        structure Vector =
+            struct
+                open Vector
+                type vector = int Vector.vector
+                type elem = int
+            end
+        fun map f a = tabulate(length a, fn x => (f (sub(a,x))))
+        fun mapi f a = tabulate(length a, fn x => (f (x,sub(a,x))))
+        fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
+    end
+*)
+
 
 signature MONO_VECTOR =
   sig

@@ -107,7 +107,7 @@ signature MONO_SPARSE_MATRIX =
 	val sub : matrix * index -> elem
 	val update : matrix * index * elem -> unit
 
-	val slice : (matrix * int * int) -> (Tensor.tensor * Index.array) list
+	val slice : (matrix * int * int) -> (Tensor.tensor * Index.array * index) list
 
 	val map : (elem -> elem) -> matrix -> matrix
 	val app : (elem -> unit) -> matrix -> unit
@@ -534,7 +534,7 @@ struct
                                                             else ()
                                        in
                                            loop (s,0);
-                                           if len > 0 then SOME (RTensor.fromArray ([1,len],res),rsi) else NONE
+                                           if len > 0 then SOME (RTensor.fromArray ([1,len],res),rsi,offset) else NONE
                                        end)
                    | (Index.CSR,0) => (let val s   = IntArray.sub (indptr, i')
                                            val e   = (if i'< (m-1) 
@@ -549,7 +549,7 @@ struct
                                                             else ()
                                        in
                                            loop (s,0);
-                                           if len > 0 then SOME (RTensor.fromArray ([1,len],res),rsi) else NONE
+                                           if len > 0 then SOME (RTensor.fromArray ([1,len],res),rsi,offset) else NONE
                                        end)
                    | (Index.CSC,0) => (let val vs = IntArray.foldri
                                                         (fn (n,ii,ax) =>  if ii=i then (Array.sub(data,n),ii)::ax else ax)
@@ -558,7 +558,8 @@ struct
                                        in
                                            if len > 0 
                                            then SOME (RTensor.fromList ([1,len],map #1 vs),
-                                                      IntArray.fromList (map #2 vs)) 
+                                                      IntArray.fromList (map #2 vs),
+                                                      offset) 
                                            else NONE
                                        end)
                    | (Index.CSR,1) => (let val vs = IntArray.foldri
@@ -567,7 +568,8 @@ struct
                                            val len = List.length vs
                                        in
                                            if len > 0 then SOME (RTensor.fromList ([1,len],map #1 vs),
-                                                                 IntArray.fromList (map #2 vs)) else NONE
+                                                                 IntArray.fromList (map #2 vs),
+                                                                 offset) else NONE
                                        end)
                    | (_,_) => raise Index)
                 end)

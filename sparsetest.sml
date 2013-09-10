@@ -114,8 +114,8 @@ val _ = Loop.app
                         val sl = SparseMatrix.slice (SA,1,i) 
                     in
                          List.app
-                             (fn (sl,si) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
-                                             TensorFile.intArrayWrite (TextIO.stdOut) si)) sl
+                             (fn (sl,si,offset) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
+                                                    TensorFile.intArrayWrite (TextIO.stdOut) si)) sl
                     end)
 
 val blocks = #blocks SA
@@ -154,7 +154,7 @@ val _ = Loop.app
                         val sl = SparseMatrix.slice (SB,1,i) 
                     in
                          List.app 
-                             (fn (sl,si) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
-                                             TensorFile.intArrayWrite (TextIO.stdOut) si))
+                             (fn (sl,si,offset) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
+                                                    TensorFile.intArrayWrite (TextIO.stdOut) si))
                              sl
                     end)

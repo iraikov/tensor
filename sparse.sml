@@ -146,7 +146,7 @@ structure SparseIndex =
 	fun validShape shape = List.all (fn x => x > 0) shape
 	fun validIndex index = List.all (fn x => x >= 0) index
 
-        val sub = Unsafe.IntArray.sub
+        val sub = IntArray.sub
 
         fun findFromTo (i,v,s,e) =
             let fun loop (j) = 
@@ -322,28 +322,28 @@ struct
                                                   end
                                               else ()
                                           end)
-                    val data'   = Array.array (!nzcount+1, Number.zero)
-                    val indices = IntArray.array (!nzcount+1, 0)
+                    val data'   = Array.array (!nzcount, Number.zero)
+                    val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (cols, 0)
-                    val update  = Unsafe.IntArray.update
+                    val update  = IntArray.update
+                    val fi      = Array.foldli
+                                      (fn (n,SOME cols,i) => 
+                                          let 
+                                              val i' = DynArray.foldr
+                                                           (fn ((rowind,v),i) => 
+                                                               (Array.update (data',i,v); 
+                                                                update (indices,i,rowind); 
+                                                                i+1))
+                                                           i cols
+                                          in
+                                              (update (indptr,n,i); i')
+                                          end
+                                      | (n,NONE,i) => (update (indptr,n,i); i))
+                                      0 data
                 in
-                    (Array.foldli (fn (n,SOME cols,i) => 
-                                      let 
-                                          val i' = DynArray.foldr
-                                                       (fn ((rowind,v),i) => 
-                                                           (Array.update (data',i,v); 
-                                                            update (indices,i,rowind); 
-                                                            i+1))
-                                                       i cols
-                                      in
-                                          (update (indptr,n,i); i')
-                                      end
-                                   | (n,NONE,i) => i)
-                                  0 data;
-                     {shape=shape,
-                      blocks=[{offset=case offset of NONE => [0, 0] | SOME i => i, 
-                               shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
-                     )
+                    {shape=shape,
+                     blocks=[{offset=case offset of NONE => [0, 0] | SOME i => i, 
+                              shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
                 end
               | Index.CSR => 
                 let 
@@ -371,27 +371,28 @@ struct
                                                           end
                                                       else ()
                                                   end)
-                    val data'   = Array.array (!nzcount+1, Number.zero)
-                    val indices = IntArray.array (!nzcount+1, 0)
+                    val data'   = Array.array (!nzcount, Number.zero)
+                    val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
-                    val update  = Unsafe.IntArray.update
+                    val update  = IntArray.update
+                    val fi      = Array.foldli
+                                      (fn (n,SOME rows,i) => 
+                                          let 
+                                              val i' = DynArray.foldr 
+                                                           (fn ((colind,v),i) => 
+                                                               (Array.update (data',i,v); 
+                                                                update (indices,i,colind); 
+                                                                i+1))
+                                                           i rows
+                                          in
+                                              (update (indptr,n,i); i')
+                                          end
+                                      | (n,NONE,i) => (update (indptr,n,i); i))
+                                      0 data
                 in
-                    (Array.foldli (fn (n,SOME rows,i) => 
-                                      let 
-                                          val i' = DynArray.foldr (fn ((colind,v),i) => 
-                                                                      (Array.update (data',i,v); 
-                                                                       update (indices,i,colind); 
-                                                                       i+1))
-                                                                  i rows
-                                      in
-                                          (update (indptr,n,i); i')
-                                      end
-                                  | (n,NONE,i) => i)
-                                  0 data;
-                     {shape=shape, 
-                      blocks=[{offset = case offset of NONE => [0,0] | SOME i => i, 
-                               shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
-                     )
+                    {shape=shape, 
+                     blocks=[{offset = case offset of NONE => [0,0] | SOME i => i, 
+                              shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
                 end
         end)
 
@@ -521,10 +522,9 @@ struct
                 (case (Index.order,axis) of
                      (Index.CSC,1) => (let 
                                            val s   = IntArray.sub (indptr, i')
-                                           val e   = (if i'< (if (axis=0) then (m-1) else (n-1))
+                                           val e   = (if i' < n-1
                                                       then IntArray.sub (indptr, i'+1) else Array.length data)
                                            val len = e-s
-
                                            val res = RNumberArray.array (len, Number.zero)
                                            val rsi = IntArray.array (len, 0)
                                            fun loop (i,n) = if i < e 
@@ -537,7 +537,7 @@ struct
                                            if len > 0 then SOME (RTensor.fromArray ([1,len],res),rsi) else NONE
                                        end)
                    | (Index.CSR,0) => (let val s   = IntArray.sub (indptr, i')
-                                           val e   = (if i'< (if (axis=0) then (m-1) else (n-1)) 
+                                           val e   = (if i'< (m-1) 
                                                       then IntArray.sub (indptr, i'+1) else Array.length data)
                                            val len = e-s
                                            val res = RNumberArray.array (len, Number.zero)

@@ -64,8 +64,14 @@ signature SPARSE_INDEX =
  structure Tensor : MONO_TENSOR
 	Tensors of 'elem' type.
 
- fromTensor [[number,number,...]*]
-	Builds a sparse matrix up from a tensor
+ fromTensor  [[number,number,...]*]
+ fromTensor' [[number,number,...]*]
+	Builds a sparse matrix up from a tensor.
+        fromTensor converts the tensor to sparse format;
+        fromTensor uses it as-is
+
+ fromTensorList  [[number,number,...]*]
+	Builds a sparse matrix up from a list of tensors.
 
  sub (matrix,row,column)
  update (matrix,row,column,value)
@@ -90,6 +96,7 @@ signature SPARSE_INDEX =
 signature MONO_SPARSE_MATRIX =
     sig
 	structure Tensor : MONO_TENSOR
+	structure TensorSlice : MONO_TENSOR_SLICE
 	structure Number : NUMBER
 	structure Index : SPARSE_INDEX
 
@@ -100,18 +107,20 @@ signature MONO_SPARSE_MATRIX =
 	exception Data and Shape
 
 	val fromTensor : index -> (Tensor.tensor * (index option)) -> matrix
-	val fromTensorList : index -> (Tensor.tensor * index) list -> matrix
+	val fromTensorList : index -> {tensor: Tensor.tensor, offset: index, sparse: bool} list -> matrix
 
 	val shape : matrix -> index
 
 	val sub : matrix * index -> elem
 	val update : matrix * index * elem -> unit
 
-	val slice : (matrix * int * int) -> (Tensor.tensor * Index.array * index) list
-
 	val map : (elem -> elem) -> matrix -> matrix
 	val app : (elem -> unit) -> matrix -> unit
 
+        datatype slice = SLSPARSE of {offset: index, indices: Index.array, data: Tensor.tensor}
+                       | SLDENSE  of {offset: index, data: TensorSlice.slice}
+	val slice : (matrix * int * int) ->  slice list
+        val sliceAppi: ((int * elem) -> unit) -> slice list -> unit
 
 (*
 	val mapi : (index * elem -> elem) -> matrix -> matrix
@@ -242,14 +251,21 @@ structure SparseMatrix : MONO_SPARSE_MATRIX =
 
 struct
     structure Tensor : MONO_TENSOR = RTensor
+    structure TensorSlice : MONO_TENSOR_SLICE = RTensorSlice
     structure Number = RTensor.Number
     structure Index = SparseIndex
 
     type index   = Index.t
     type nonzero = Index.nonzero
     type elem    = Number.t
-    type block   = {offset: index, shape: index, nz: nonzero, data: elem array}
+    datatype block = 
+             SPARSE of {offset: index, shape: index, nz: nonzero, data: elem array}
+           | DENSE of {offset: index, data: Tensor.tensor}
+
     type matrix  = {shape: index, blocks: block list}
+
+    datatype slice = SLSPARSE of {offset: index, indices: Index.array, data: Tensor.tensor}
+                   | SLDENSE  of {offset: index, data: TensorSlice.slice}
 
     exception Data
     exception Shape
@@ -273,14 +289,22 @@ struct
     fun findBlock (i,j,blocks) =
         let
             val block = List.find
-                            (fn ({offset=offset, shape=shape, nz, data}) =>
-                                let
+                            (fn (SPARSE {offset=offset, shape=shape, nz, data}) =>
+                                (let
                                     val (u,v) = dimVals offset
                                     val (t,s) = dimVals shape
                                 in
                                     ((j>=v) andalso (j-v<s) andalso
                                      (i>=u) andalso (i-u<t))
                                 end)
+                                | (DENSE {offset=offset, data}) =>
+                                (let
+                                    val (u,v) = dimVals offset
+                                    val (t,s) = dimVals (Tensor.shape data)
+                                in
+                                    ((j>=v) andalso (j-v<s) andalso
+                                     (i>=u) andalso (i-u<t))
+                                end))
                             blocks
         in
             block
@@ -342,8 +366,8 @@ struct
                                       0 data
                 in
                     {shape=shape,
-                     blocks=[{offset=case offset of NONE => [0, 0] | SOME i => i, 
-                              shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
+                     blocks=[SPARSE {offset=case offset of NONE => [0, 0] | SOME i => i, 
+                                     shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
                 end
               | Index.CSR => 
                 let 
@@ -391,57 +415,100 @@ struct
                                       0 data
                 in
                     {shape=shape, 
-                     blocks=[{offset = case offset of NONE => [0,0] | SOME i => i, 
-                              shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
+                     blocks=[SPARSE {offset = case offset of NONE => [0,0] | SOME i => i, 
+                                     shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
                 end
         end)
 
-        fun insert ({shape, blocks},t,toffset) =
-            let
-                val (i,j) = dimVals toffset
-                val {shape=_, blocks=bs} = fromTensor shape (t,SOME [i,j])
-                val b': block = case bs of
-                                    [b] => b
-                                  | _ => raise Match
-                val (m,n) = dimVals (#shape b')
 
-                val blocks' = 
-                    let
-                        fun merge ([], []) = [b']
-                          | merge ((b as {offset=offset,shape=shape,nz,data})::rst, ax) =
-                            let 
-                                val (bm,bn) = dimVals shape
-                                val (bi,bj) = dimVals offset
-                            in
-                                if (j < bj)
-                                then List.rev (rst@(b::b'::ax))
-                                else (if (i >= bi) andalso (j >= bj) andalso 
-                                         (i+m <= bi+bm) andalso (j+n <= bj+bn)
-                                      then raise Overlap
-                                      else merge (rst, b::ax))
-                            end
-                            | merge ([], ax) = List.rev (b'::ax)
-                    in
-                        merge (blocks, [])
-                    end
-            in
+    fun fromTensor' shape (a: Tensor.tensor, offset) = 
+        let 
+            val shape_a = Tensor.shape a 
+            val (rows,cols) = dimVals shape_a
+        in
+            {shape=shape, blocks=[DENSE {offset=(case offset of NONE => [0, 0] | SOME i => i), 
+                                         data=a}]}
+        end
+
+    fun insertBlock ({shape, blocks},b',boffset) =
+        let
+            val (i,j) = dimVals boffset
+            val (m,n) = dimVals (case b' of
+                                     SPARSE {offset, shape, nz, data} => shape
+                                   | DENSE {offset, data} => Tensor.shape data)
+
+                                
+            val blocks' = 
+                let
+                    fun merge ([], []) = [b']
+                      | merge (b::rst, ax) =
+                        let 
+                            val (bm,bn) = dimVals (case b of 
+                                                       SPARSE {offset,shape=shape,nz,data} => shape
+                                                     | DENSE {offset,data} => Tensor.shape data)
+                            val (bi,bj) = dimVals (case b of
+                                                       SPARSE {offset=offset,shape,nz,data} => offset
+                                                     | DENSE {offset=offset,data} => offset)
+                        in
+                            if (j < bj)
+                            then List.rev (rst@(b::b'::ax))
+                            else (if (i >= bi) andalso (j >= bj) andalso 
+                                     (i+m <= bi+bm) andalso (j+n <= bj+bn)
+                                  then raise Overlap
+                                  else merge (rst, b::ax))
+                        end
+                      | merge ([], ax) = List.rev (b'::ax)
+                in
+                    merge (blocks, [])
+                end
+        in
                 {shape=shape, blocks=blocks'}
-            end
+        end
 
+            
+    fun insertTensor (S as {shape, blocks},t,offset) =
+        let
+            val (i,j) = dimVals offset
+            val {shape=_, blocks=bs} = fromTensor shape (t,SOME [i,j])
+            val b': block = case bs of
+                                [b] => b
+                              | _ => raise Match
+        in
+            insertBlock (S,b',offset)
+        end
+
+    fun insertTensor' (S as {shape, blocks},t,offset) =
+        let
+            val (i,j) = dimVals offset
+            val {shape=_, blocks=bs} = fromTensor' shape (t,SOME [i,j])
+            val b': block = case bs of
+                                [b] => b
+                              | _ => raise Match
+        in
+            insertBlock (S,b',offset)
+        end
+                                               
                   
     (* Builds a sparse matrix from a list of the form:
   
-       ([xoffset,yoffset],tensor) ...
+       {tensor,offset=[xoffset,yoffset],sparse) ...
 
      where xoffset and yoffset are the positions where to insert the
      given tensor. The tensors to be inserted must be non-overlapping.
+     sparse is a boolean flag that indicates whether the tensor should
+     be converted to sparse form.
     *)
 
-    fun fromTensorList shape (al: (Tensor.tensor * index) list) = 
+    fun fromTensorList shape (al: ({tensor: Tensor.tensor, offset: index, sparse: bool}) list) = 
         (case al of
-             (a,i)::rst => 
-             (List.foldl (fn ((a,i),ax) => insert (ax,a,i))
-                         (fromTensor shape (a, SOME i))
+             {tensor,offset,sparse}::rst => 
+             (List.foldl (fn ({tensor,offset,sparse},ax) => 
+                             if sparse
+                             then insertTensor (ax,tensor,offset)
+                             else insertTensor' (ax,tensor,offset))
+                         (if sparse 
+                          then fromTensor shape (tensor, SOME offset)
+                          else fromTensor' shape (tensor, SOME offset) )
                          rst)
            | _ => raise Match)
 
@@ -456,14 +523,23 @@ struct
             val block = findBlock (i,j,blocks)
         in
             case block of
-                SOME ({offset, shape, nz, data}) => 
-                let 
-                    val (m,n) = dimVals offset
-                    val p = Index.toInt shape nz [i-m,j-n]
-                 in
-                     case p of SOME p' => Array.sub (data, p')
-                             | NONE => Number.zero
-                 end
+                SOME (b) => 
+                (case b of 
+                     SPARSE {offset, shape, nz, data} => 
+                     (let 
+                         val (m,n) = dimVals offset
+                         val p = Index.toInt shape nz [i-m,j-n]
+                       in
+                           case p of SOME p' => Array.sub (data, p')
+                                   | NONE => Number.zero
+                       end)
+                     | DENSE {offset, data} => 
+                     (let 
+                         val (m,n) = dimVals offset
+                       in
+                           Tensor.sub (data,[i+m,j+n])
+                       end)
+                )
               | NONE => Number.zero
         end
 
@@ -473,23 +549,41 @@ struct
             val block = findBlock (i,j,blocks)
         in
             case block of
-                SOME ({offset, shape, nz, data}) => 
-                let
-                    val (m,n) = dimVals shape
-                    val p     = Index.toInt shape nz [i-m,j-n]
-                in
-                    case p of SOME p' => Array.update (data, p', new) | NONE => ()
-                end
+                SOME (b) => 
+                (case b of 
+                     SPARSE {offset, shape, nz, data} => 
+                     (let
+                         val (m,n) = dimVals shape
+                         val p     = Index.toInt shape nz [i-m,j-n]
+                     in
+                         case p of SOME p' => Array.update (data, p', new) | NONE => ()
+                     end)
+                     | DENSE {offset, data} =>
+                       (let 
+                         val (m,n) = dimVals offset
+                       in
+                           Tensor.update (data,[i+m,j+n],new)
+                       end)
+                )
               | NONE => ()
         end
 
     fun findBlocks (i,axis,blocks) =
         let
             val blocks' = List.mapPartial
-                            (fn (b as {offset=offset, shape=shape, nz, data}) =>
+                            (fn (b ) =>
                                 let
-                                    val (u,v) = dimVals offset
-                                    val (t,s) = dimVals shape
+                                    val (u,v) = case b of 
+                                                    SPARSE {offset=offset, shape=shape, nz, data} => 
+                                                      dimVals offset
+                                                    | DENSE {offset, data} =>
+                                                      dimVals offset
+                                    val (t,s) = case b of 
+                                                    SPARSE {offset=offset, shape=shape, nz, data} => 
+                                                    dimVals shape
+                                                    | DENSE {offset, data} =>
+                                                      dimVals (Tensor.shape data)
+                                                            
                                 in
                                     (case axis of
                                          1 => if ((i>=v) andalso (i-v<s)) then SOME b else NONE
@@ -512,7 +606,7 @@ struct
                                                               
         in
             List.mapPartial
-            (fn ({offset=offset, shape=shape, nz={indptr, indices}, data})  =>
+            (fn (SPARSE {offset=offset, shape=shape, nz={indptr, indices}, data})  =>
                 let 
                     val (u,v) = dimVals offset
                     val (m,n) = dimVals shape
@@ -534,7 +628,11 @@ struct
                                                             else ()
                                        in
                                            loop (s,0);
-                                           if len > 0 then SOME (RTensor.fromArray ([1,len],res),rsi,offset) else NONE
+                                           if len > 0 
+                                           then SOME (SLSPARSE {data=Tensor.fromArray ([1,len],res),
+                                                                indices=rsi,
+                                                                offset=offset})
+                                           else NONE
                                        end)
                    | (Index.CSR,0) => (let val s   = IntArray.sub (indptr, i')
                                            val e   = (if i'< (m-1) 
@@ -549,7 +647,11 @@ struct
                                                             else ()
                                        in
                                            loop (s,0);
-                                           if len > 0 then SOME (RTensor.fromArray ([1,len],res),rsi,offset) else NONE
+                                           if len > 0 
+                                           then SOME (SLSPARSE {data=Tensor.fromArray ([1,len],res),
+                                                                indices=rsi,
+                                                                offset=offset})
+                                           else NONE
                                        end)
                    | (Index.CSC,0) => (let val vs = IntArray.foldri
                                                         (fn (n,ii,ax) =>  if ii=i then (Array.sub(data,n),ii)::ax else ax)
@@ -557,9 +659,9 @@ struct
                                            val len = List.length vs
                                        in
                                            if len > 0 
-                                           then SOME (RTensor.fromList ([1,len],map #1 vs),
-                                                      IntArray.fromList (map #2 vs),
-                                                      offset) 
+                                           then SOME (SLSPARSE {data=Tensor.fromList ([1,len],map #1 vs),
+                                                                indices=IntArray.fromList (map #2 vs),
+                                                                offset=offset})
                                            else NONE
                                        end)
                    | (Index.CSR,1) => (let val vs = IntArray.foldri
@@ -567,12 +669,28 @@ struct
                                                         [] indices
                                            val len = List.length vs
                                        in
-                                           if len > 0 then SOME (RTensor.fromList ([1,len],map #1 vs),
-                                                                 IntArray.fromList (map #2 vs),
-                                                                 offset) else NONE
+                                           if len > 0 
+                                           then SOME (SLSPARSE {data=Tensor.fromList ([1,len],map #1 vs),
+                                                                indices=IntArray.fromList (map #2 vs),
+                                                                offset=offset})
+                                           else NONE
                                        end)
                    | (_,_) => raise Index)
-                end)
+                end
+            | (DENSE {offset=offset, data})  =>
+              let 
+                    val (u,v) = dimVals offset
+                    val (m,n) = dimVals (Tensor.shape data)
+
+                    val i'  = case axis of 1 => i-v | 0 => i-u | _ => raise Match
+                    val sl  = case axis of 
+                                  1 => TensorSlice.fromto ([0,i'],[m-1,i'],data)
+                                | 0 => TensorSlice.fromto ([i',0],[i',n-1],data)
+                                | _ => raise Match
+              in
+                  SOME (SLDENSE {data=sl, offset=offset})
+              end
+            )
             (findBlocks (i,axis,blocks) )
             
                                     
@@ -584,12 +702,44 @@ struct
     fun map f {shape, blocks} =
         {shape=shape,
          blocks=(List.map 
-                     (fn {offset, shape, nz, data} =>
-                         {offset=offset, shape=shape, nz=nz, data=array_map f data})
+                     (fn (SPARSE {offset, shape, nz, data}) =>
+                         (SPARSE {offset=offset, shape=shape, nz=nz, data=array_map f data})
+                     |  (DENSE {offset, data}) =>
+                         (DENSE {data=(Tensor.map f data), offset=offset}))
                      blocks)}
 
     fun app f {shape, blocks} = 
-        List.app (fn {offset, shape, nz, data} => Array.app f data) blocks
+        List.app (fn (SPARSE {offset, shape, nz, data}) => 
+                     Array.app f data
+                 | (DENSE {offset, data}) => 
+                   Tensor.app f data)
+                 blocks
+
+    fun sliceAppi f sl =
+        List.app
+            (fn (SLSPARSE {data=sl,indices=si,offset}) => 
+                let val (m,n) = dimVals offset
+                in
+                    (RTensor.foldl
+                         (fn (x,i) => 
+                             let
+                                 val i' = Index.sub (si,i)+m
+                             in
+                                 (f (i',x); i+1)
+                             end) 0 sl; ())
+                end
+            | (SLDENSE {data=sl,offset}) => 
+              let val (m,n) = dimVals offset
+              in
+                  (RTensorSlice.foldl
+                       (fn (x,i) => 
+                           let
+                               val i' = i+m
+                           in
+                               (f (i',x); i+1)
+                           end) 0 sl; ())
+              end)
+            sl  
 
 
     (* --- BINOPS --- *)
@@ -603,130 +753,3 @@ struct
 end
 
 
-
-signature MONO_SPARSE_TENSOR =
-    sig
-	structure Tensor : MONO_TENSOR
-	structure TensorSlice : MONO_TENSOR_SLICE
-	structure Number : NUMBER
-	structure Index  : INDEX
-	structure Range  : RANGE
-
-        type index = Index.t
-	type elem = Number.t
-	type tensor
-
-	exception Shape
-
-        val new: index * elem -> tensor
-
-	val shape  : tensor -> index
-        val length : tensor -> int
-        val rank   : tensor -> int
-
-	val sub     : tensor * index -> elem
-	val update : tensor * index * elem -> unit
-        val insert :  tensor * Tensor.tensor * index -> tensor
-
-	val map : (elem -> elem) -> tensor -> Tensor.tensor list
-	val app : (elem -> unit) -> tensor -> unit
-
-    end
-
-
-structure SparseTensor : MONO_SPARSE_TENSOR =
-
-struct
-    structure Tensor : MONO_TENSOR = RTensor
-    structure TensorSlice : MONO_TENSOR_SLICE = RTensorSlice
-    structure Number = RTensor.Number
-    structure Index  = Index
-    structure Range  = Range
-
-    type index   = Index.t
-    type elem    = Number.t
-    type range   = Range.t
-    type block   = {r: range, data: Tensor.tensor}
-    type tensor  = {shape: index, nz: block list, default: elem}
-
-    exception Shape
-    exception Index
-    exception Overlap
-
-    fun new (shape, init) =
-        if not (Index.validShape shape) then
-            raise Shape
-        else
-            {shape = shape, nz=[], default=init}
-
-    fun default {shape, nz, default} = default
-                
-    fun length ({shape, nz, default}: tensor) =  
-        List.foldl (fn (b,ax) => (Tensor.length (#data b))+ax) 0 nz
-              
-    fun shape {shape, nz, default} = shape
-
-    fun rank t = List.length (shape t)
-
-    fun whichBlock ({shape, nz, default}: tensor) i =
-        List.find (fn (b) => Range.inRange (#r b) i) nz
-
-    fun sub (t as {shape, nz, default}, i) = 
-        case whichBlock t i of
-            SOME b => 
-            let
-                val i' = Index.-(i, Range.first (#r b)) 
-            in 
-                Tensor.sub ((#data b), i')
-            end
-          | NONE => default
-
-    fun update (t as {shape, nz, default}, i, v) = 
-        case whichBlock t i of
-            SOME b => 
-            let
-                val i' = Index.-(i, Range.first (#r b)) 
-            in Tensor.update ((#data b), i', v) end
-          | NONE => raise Index
-                             
-    fun insert (x: tensor, y: Tensor.tensor, i) =
-        if not (rank x = Tensor.rank y) 
-        then raise Shape
-        else 
-            (let
-                val xshape  = shape x
-                val yshape  = Tensor.shape y
-                val nzx     = #nz x
-                val j       = Index.decr (Index.+ (i,yshape))
-                val r       = Range.fromto xshape (i,j)
-                val b'      = {r=r,data=y}
-
-                val nzx'    = 
-                    let
-                        fun merge ([], []) = [b']
-                          | merge (b::rst, ax) =
-                            let 
-                                val bi = Range.first (#r b)
-                                val bj = Range.last (#r b)
-                            in
-                                if Index.< (j, bi)
-                                then List.rev (rst@(b::b'::ax))
-                                else (if Index.>= (i, bi) andalso Index.<= (j, bj)
-                                      then raise Overlap
-                                      else merge (rst, b::ax))
-                            end
-                            | merge ([], ax) = List.rev (b'::ax)
-                    in
-                        merge (nzx, [])
-                    end
-            in
-                {shape=xshape, nz=nzx', default=(#default x)}
-            end)
-
-    fun map f ({shape, nz, default}: tensor) =
-        List.map (fn (b) => Tensor.map f (#data b)) nz
-                 
-    fun app f ({shape, nz, default}: tensor) =
-        List.app (fn (b) => Tensor.app f (#data b)) nz
-                
-end

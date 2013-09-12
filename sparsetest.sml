@@ -38,48 +38,7 @@ fun realRandomTensor (xseed,yseed) shape =
         loop (length - 1)
     end
 
-val _ = putStrLn TextIO.stdOut "SparseTensor insert:"
-val S    = SparseTensor.new ([4,4],0.0)
-val ones = RTensor.new ([2,2],1.0)
-val twos = RTensor.new ([2,2],2.0)
-val threes = RTensor.new ([1,2],3.0)
-val S    = SparseTensor.insert (S, threes, [2,0])
-val S    = SparseTensor.insert (S, ones, [0,0])
-val S    = SparseTensor.insert (S, twos, [2,2])
-val v = SparseTensor.sub (S,[0,0])
-val _ = (print "S(0,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[0,1])
-val _ = (print "S(0,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[0,2])
-val _ = (print "S(0,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[0,3])
-val _ = (print "S(0,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[1,0])
-val _ = (print "S(1,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[1,1])
-val _ = (print "S(1,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[1,2])
-val _ = (print "S(1,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[1,3])
-val _ = (print "S(1,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[2,0])
-val _ = (print "S(2,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[2,1])
-val _ = (print "S(2,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[2,2])
-val _ = (print "S(2,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[2,3])
-val _ = (print "S(2,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[3,0])
-val _ = (print "S(3,0) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[3,1])
-val _ = (print "S(3,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[3,2])
-val _ = (print "S(3,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
-val v = SparseTensor.sub (S,[3,3])
-val _ = (print "S(3,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
-
-val _ = putStrLn TextIO.stdOut "SparseTensor fromTensor:"
+val _ = putStrLn TextIO.stdOut "SparseMatrix fromTensor:"
 
 val SA  = SparseMatrix.fromTensor
               [6,6] 
@@ -113,25 +72,27 @@ val _ = Loop.app
                         val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,1,i) 
                     in
-                         List.app
-                             (fn (sl,si,offset) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
-                                                    TensorFile.intArrayWrite (TextIO.stdOut) si)) sl
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
                     end)
 
 val blocks = #blocks SA
 
-val _ = putStrLn TextIO.stdOut "SparseTensor fromTensorList:"
+val _ = putStrLn TextIO.stdOut "SparseMatrix fromTensorList:"
 
 val SB = SparseMatrix.fromTensorList 
              [10,10]
              [
-              (RTensor.*> 0.2
-                       (RTensor.new ([3,8],1.0)),
-               [7,0]),
+              {tensor=(RTensor.*> 0.2
+                               (RTensor.new ([3,8],1.0))),
+               offset=[7,0],
+               sparse=true},
               
-              (RTensor.*> 0.1 
-                       (RTensor.new ([7,8],1.0)),
-               [0,0])
+              {tensor=(RTensor.*> 0.1 
+                               (RTensor.new ([7,8],1.0))),
+               offset=[0,0],
+               sparse=true}
               
              ]
 
@@ -153,8 +114,7 @@ val _ = Loop.app
                         val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SB,1,i) 
                     in
-                         List.app 
-                             (fn (sl,si,offset) => (TensorFile.realTensorWrite (TextIO.stdOut) sl;
-                                                    TensorFile.intArrayWrite (TextIO.stdOut) si))
-                             sl
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
                     end)

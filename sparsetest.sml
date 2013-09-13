@@ -30,13 +30,34 @@ fun realRandomTensor (xseed,yseed) shape =
     let 
         val length = Index.length shape
         val seed   = Random.rand (xseed,yseed)
-        val a      = RTensor.Array.array(length, Random.randReal seed)
+        val a      = RTensor.Array.array(length, 0.0)
         fun loop 0 = RTensor.fromArray(shape, a)
           | loop j = (RTensor.Array.update(a, length-j, Random.randReal seed);
                       loop (j-1))
     in 
         loop (length - 1)
     end
+
+val _ = putStrLn TextIO.stdOut "SparseMatrix fromGenerator:"
+
+val seed   = Random.rand (13,17)
+val prob   = 0.1
+val SA     = SparseMatrix.fromGenerator
+                 [10,10] 
+                 (fn (i) => (if Real.>= (Random.randReal seed, prob) then 1.0 else 0.0),
+                  [4,4], SOME [5,5])
+
+val _ = Loop.app
+            (0,10,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (SA,1,i) 
+                    in
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
+                    end)
+
 
 val _ = putStrLn TextIO.stdOut "SparseMatrix fromTensor:"
 

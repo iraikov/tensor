@@ -109,6 +109,8 @@ signature MONO_SPARSE_MATRIX =
 	val fromTensor : index -> (Tensor.tensor * (index option)) -> matrix
 	val fromTensorList : index -> {tensor: Tensor.tensor, offset: index, sparse: bool} list -> matrix
 	val fromGenerator : index -> ((index -> elem) * index * (index option)) -> matrix
+	val fromGeneratorList : index -> ({f: (index -> elem), fshape: index, offset: index} list) -> matrix
+        val insert : matrix * matrix -> matrix
 
 	val shape : matrix -> index
 
@@ -546,7 +548,8 @@ struct
                                      SPARSE {offset, shape, nz, data} => shape
                                    | DENSE {offset, data} => Tensor.shape data)
 
-                                
+                              
+
             val blocks' = 
                 let
                     fun merge ([], []) = [b']
@@ -558,6 +561,7 @@ struct
                             val (bi,bj) = dimVals (case b of
                                                        SPARSE {offset=offset,shape,nz,data} => offset
                                                      | DENSE {offset=offset,data} => offset)
+
                         in
                             if (j < bj)
                             then List.rev (rst@(b::b'::ax))
@@ -620,6 +624,39 @@ struct
                           else fromTensor' shape (tensor, SOME offset) )
                          rst)
            | _ => raise Match)
+
+
+    fun fromGeneratorList shape (gg: ({f: index -> elem, fshape: index, offset: index}) list) = 
+        case gg of 
+            ({f,fshape,offset}::rst) =>
+            (List.foldl 
+                 (fn ({f,fshape,offset},S) => 
+                     let
+                         val {shape=_, blocks=bs} = fromGenerator shape (f,fshape,SOME offset)
+                         val b': block = case bs of
+                                             [b] => b
+                                           | _ => raise Match
+                     in
+                         insertBlock (S,b',offset)
+                 end)
+                 (fromGenerator shape (f,fshape,SOME offset)) rst)
+            | _ => raise Match
+
+
+    fun insert (x: matrix, y: matrix) =
+        let
+            val {shape=_, blocks=bs} = x
+        in
+            foldl (fn (b,S) => 
+                      let
+                          val offset = (case b of 
+                                            SPARSE {offset, shape, nz, data} =>  offset
+                                          | DENSE {offset, data} => offset)
+                      in
+                          insertBlock (S,b,offset)
+                      end) y bs
+        end
+
 
 
     (* --- ACCESSORS --- *)

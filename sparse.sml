@@ -124,6 +124,7 @@ signature MONO_SPARSE_MATRIX =
                        | SLDENSE  of {offset: index, data: TensorSlice.slice}
 	val slice : (matrix * int * int) ->  slice list
         val sliceAppi: ((int * elem) -> unit) -> slice list -> unit
+        val sliceFoldi: ((int * elem * 'a) -> 'a) -> 'a -> slice list -> 'a
 
 (*
 	val mapi : (index * elem -> elem) -> matrix -> matrix
@@ -886,6 +887,32 @@ struct
                            end) 0 sl; ())
               end)
             sl  
+
+    fun sliceFoldi f init sl =
+        List.foldl
+            (fn (SLSPARSE {data=sl,indices=si,offset},ax) => 
+                let val (m,n) = dimVals offset
+                in
+                    #2 (RTensor.foldl
+                            (fn (x,(i,ax)) => 
+                                let
+                                    val i' = Index.sub (si,i)+m
+                                in
+                                    (i+1, f (i',x,ax))
+                                end) (0,ax) sl)
+                end
+            | (SLDENSE {data=sl,offset},ax) => 
+              let val (m,n) = dimVals offset
+              in
+                  #2 (RTensorSlice.foldl
+                          (fn (x,(i,ax)) => 
+                              let
+                                  val i' = i+m
+                              in
+                                  (i+1, f (i',x,ax))
+                              end) (0,ax) sl)
+              end)
+            init sl  
 
 
     (* --- BINOPS --- *)

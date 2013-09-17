@@ -98,6 +98,17 @@ val _ = Loop.app
                             sl
                     end)
 
+val _ = Loop.app
+            (0,6,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice row " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (SA,0,i) 
+                    in
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
+                    end)
+
 val blocks = #blocks SA
 
 val _ = putStrLn TextIO.stdOut "SparseMatrix fromTensorList:"

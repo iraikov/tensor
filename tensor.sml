@@ -137,7 +137,7 @@ structure Loop =
         more slowly, while ColumnMajor means that last index is the most
         significant and varies more slowly. For instance
                 RowMajor => [0,0]<[0,1]<[1,0]<[1,1] (C, C++, Pascal)
-                ColumnMajor => [0,0]>[1,0]>[0,1]>[1,1] (Fortran)
+                ColumnMajor => [0,0]>[1,0]>[0,1]>[1,1] (Fortran, Matlab)
   last shape
   first shape
         Returns the last/first index that belongs to the set defined by
@@ -936,10 +936,10 @@ end
  type 'a tensor
         Polymorphic tensor whose elements are all of type 'a.
  val storage = RowMajor | ColumnMajor
-        RowMajor = data is stored in consecutive cells, first index
-        varying fastest (FORTRAN convention)
-        ColumnMajor = data is stored in consecutive cells, last
-        index varying fastest (C,C++,Pascal,CommonLisp convention)
+        RowMajor = data is stored in consecutive cells, last index
+        varying fastest (C,C++,Pascal)
+        ColumnMajor = data is stored in consecutive cells, first
+        index varying fastest (Fortran,Matlab)
  new ([i1,...,in],init)
         Build a new tensor with n indices, each of sizes i1...in,
         filled with 'init'.
@@ -1403,10 +1403,10 @@ structure TensorSlice : TENSOR_SLICE =
  type elem
         The type of every element
  val storage = RowMajor | ColumnMajor
-        RowMajor = data is stored in consecutive cells, first index
-        varying fastest (FORTRAN convention)
-        ColumnMajor = data is stored in consecutive cells, last
-        index varying fastest (C,C++,Pascal,CommonLisp convention)
+        RowMajor = data is stored in consecutive cells, last index
+        varying fastest (C,C++,Pascal)
+        ColumnMajor = data is stored in consecutive cells, first
+        index varying fastest (Fortran,Matlab)
  new ([i1,...,in],init)
         Build a new tensor with n indices, each of sizes i1...in,
         filled with 'init'.

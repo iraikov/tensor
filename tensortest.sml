@@ -280,4 +280,32 @@ val v = RTensor.sub (S,[3,3])
 val _ = (print "S(3,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
 
 
+fun fromDiag (m, n, a, dflt) =
+    if Index.validShape [m,n]
+    then 
+        (let 
+             val na   = RTensor.Array.length a
+             val na'  = na-1
+             val te = RTensor.new ([m,n], dflt)
+             fun diag (i, j, ia) =
+                 let
+                     val ia' = 
+                         (RTensor.update (te, [i,j], RTensor.Array.sub (a, ia));
+                          if ia = na' then 0 else ia+1)
+                 in
+                     if (i=0) orelse (j=0) 
+                     then te
+                     else diag (i-1, j-1, ia)
+                 end
+         in
+             diag (m-1, n-1, 0)
+         end)
+    else 
+        raise RTensor.Shape
+
+
+val diagtensor = fromDiag (4, 4, Real64Array.fromList [1.0, 2.0, 3.0], 0.0)
+
+val _  = TensorFile.realTensorWrite (TextIO.stdOut) diagtensor
+
 end

@@ -160,7 +160,7 @@ val _ = (print "S(2,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
 val v = RTensor.sub (S,[3,1])
 val _ = (print "S(3,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
 
-
+val _ = putStrLn (TextIO.stdOut, "cat:")
 val S  = RTensor.cat (SN1, SN2, 1)
 val _ = TensorFile.realTensorWrite (TextIO.stdOut) S
 

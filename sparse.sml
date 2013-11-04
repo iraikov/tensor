@@ -800,8 +800,11 @@ struct
                                                                 offset=offset})
                                            else NONE
                                        end)
-                   | (Index.CSC,0) => (let val vs = IntArray.foldri
-                                                        (fn (n,ii,ax) =>  if ii=i then (Array.sub(data,n),ii)::ax else ax)
+                   | (Index.CSC,0) => (let fun findcol (n) = case IntArray.findi (fn (_,x) => n < x) indptr of
+                                                                 SOME (m,_) => (m-1)
+                                                               | NONE => m-1
+                                           val vs = IntArray.foldri
+                                                        (fn (n,ii,ax) => if i'=ii then (Array.sub(data,n),findcol n)::ax else ax)
                                                         [] indices
                                            val len = List.length vs
                                        in
@@ -811,8 +814,11 @@ struct
                                                                 offset=offset})
                                            else NONE
                                        end)
-                   | (Index.CSR,1) => (let val vs = IntArray.foldri
-                                                        (fn (n,ii,ax) =>  if ii=i then (Array.sub(data,n),ii)::ax else ax)
+                   | (Index.CSR,1) => (let fun findrow (n) = case IntArray.findi (fn (_,x) => n < x) indptr of
+                                                                 SOME (n,_) => (n-1)
+                                                               | NONE => n-1
+                                           val vs = IntArray.foldri
+                                                        (fn (n,ii,ax) =>  if i'=ii then (Array.sub(data,n),findrow n)::ax else ax)
                                                         [] indices
                                            val len = List.length vs
                                        in

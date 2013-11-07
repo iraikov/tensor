@@ -89,7 +89,7 @@ signature SPARSE_INDEX =
  matrix - matrix
  matrix * matrix
  matrix / matrix
- ~ matrix
+ * matrix
 	Elementwise operations.
 *)
 
@@ -130,13 +130,6 @@ signature MONO_SPARSE_MATRIX =
 	val mapi : (index * elem -> elem) -> matrix -> matrix
 	val appi : (index * elem -> unit) -> matrix -> unit
 	val map2 : (elem * elem -> elem) -> matrix -> matrix -> matrix
-
-
-	val + : matrix * matrix -> matrix
-	val - : matrix * matrix -> matrix
-	val * : matrix * matrix -> matrix
-	val / : matrix * matrix -> matrix
-	val ~ : matrix -> matrix
 *)
     end
 
@@ -857,15 +850,15 @@ struct
          blocks=(List.map 
                      (fn (SPARSE {offset, shape, nz, data}) =>
                          (SPARSE {offset=offset, shape=shape, nz=nz, data=array_map f data})
-                     |  (DENSE {offset, data}) =>
-                         (DENSE {data=(Tensor.map f data), offset=offset}))
+                       |  (DENSE {offset, data}) =>
+                          (DENSE {data=(Tensor.map f data), offset=offset}))
                      blocks)}
 
     fun app f {shape, blocks} = 
         List.app (fn (SPARSE {offset, shape, nz, data}) => 
                      Array.app f data
-                 | (DENSE {offset, data}) => 
-                   Tensor.app f data)
+                   | (DENSE {offset, data}) => 
+                     Tensor.app f data)
                  blocks
 
     fun sliceAppi f sl =
@@ -920,6 +913,7 @@ struct
               end)
             init sl  
 
+    fun *> n a = map (fn x => Number.*(n,x)) a
 
     (* --- BINOPS --- *)
 (*
@@ -927,7 +921,6 @@ struct
     fun a * b = map2 Number.* a b
     fun a - b = map2 Number.- a b
     fun a / b = map2 Number./ a b
-    fun ~ a = map Number.~ a
 *)
 end
 

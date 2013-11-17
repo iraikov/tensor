@@ -184,7 +184,6 @@ structure Loop =
   validIndex t
         Checks whether 't' conforms a valid shape or index.
 
-  iteri shape f
 *)
 
 signature INDEX =
@@ -460,18 +459,18 @@ structure Index : INDEX =
     end
     
 
-	fun a < b = compare(a,b) = LESS
-	fun a > b = compare(a,b) = GREATER
-	fun eq (a, b) = compare(a,b) = EQUAL
-	fun a <> b = not (a = b)
-	fun a <= b = not (a > b)
-	fun a >= b = not (a < b)
-	fun a - b = ListPair.map Int.- (a,b)
-	fun a + b = ListPair.map Int.+ (a,b)
-
-        fun decr a = List.map (fn (x) => Int.-(x,1)) a
-
-    end
+    fun a < b = compare(a,b) = LESS
+    fun a > b = compare(a,b) = GREATER
+    fun eq (a, b) = compare(a,b) = EQUAL
+    fun a <> b = not (a = b)
+    fun a <= b = not (a > b)
+    fun a >= b = not (a < b)
+    fun a - b = ListPair.map Int.- (a,b)
+    fun a + b = ListPair.map Int.+ (a,b)
+                
+    fun decr a = List.map (fn (x) => Int.-(x,1)) a
+                 
+  end
 
 
 signature RANGE =
@@ -502,6 +501,7 @@ signature RANGE =
 
 	val iteri_range : (index * index -> bool) -> t -> bool
 	val iteri2_range : (((index * index) * (index * index)) -> bool) -> (t * t) -> bool
+
 	val foldi_range : (((index * index) * 'a) -> 'a) -> 'a -> t -> 'a
         
     end
@@ -1010,7 +1010,7 @@ signature TENSOR =
         val map : ('a -> 'b) -> 'a tensor -> 'b tensor
         val map2 : ('a * 'b -> 'c) -> 'a tensor -> 'b tensor -> 'c tensor
         val app : ('a -> unit) -> 'a tensor -> unit
-        val appi : (int * 'a -> unit) -> 'a tensor -> unit
+        val appi : (index * 'a -> unit) -> 'a tensor -> unit
         val foldl : ('a * 'b -> 'b) -> 'b -> 'a tensor -> 'b
         val foldln : ('c * 'a -> 'c) -> 'c -> 'a tensor -> int -> 'c tensor
         val all : ('a -> bool) -> 'a tensor -> bool
@@ -1256,7 +1256,16 @@ structure Tensor : TENSOR =
                     raise Match
         end
 
-        fun appi f tensor = Array.appi f (toArray tensor)
+        fun appi f tensor = 
+            let 
+                val shape = shape tensor
+                val next = Index.next shape
+            in
+                (Array.foldl 
+                     (fn (v,i) => (f (i,v); valOf (next i)))
+                     (Index.first shape) 
+                     (toArray tensor); ())
+            end
 
         fun app f tensor = Array.app f (toArray tensor)
 
@@ -1481,7 +1490,7 @@ signature MONO_TENSOR =
         val map : (elem -> elem) -> tensor -> tensor
         val map2 : (elem * elem -> elem) -> tensor -> tensor -> tensor
         val app : (elem -> unit) -> tensor -> unit
-        val appi : (int * elem -> unit) -> tensor -> unit
+        val appi : (index * elem -> unit) -> tensor -> unit
         val foldl : (elem * 'a -> 'a) -> 'a -> tensor -> 'a
         val foldln : (elem * elem -> elem) -> elem -> tensor -> int -> tensor
         val all : (elem -> bool) -> tensor -> bool
@@ -2279,7 +2288,16 @@ structure MonoTensor  =
                 else
                     raise Match
         end
-        fun appi f tensor = Array.appi f (toArray tensor)
+        fun appi f tensor = 
+            let 
+                val shape = shape tensor
+                val next = Index.next shape
+            in
+                (Array.foldl 
+                     (fn (v,i) => (f (i,v); valOf (next i)))
+                     (Index.first shape) 
+                     (toArray tensor); ())
+            end
         fun app f tensor = Array.app f (toArray tensor)
         fun all f tensor =
             let val a = toArray tensor
@@ -2660,7 +2678,16 @@ structure MonoTensor  =
                 else
                     raise Match
         end
-        fun appi f tensor = Array.appi f (toArray tensor)
+        fun appi f tensor = 
+            let 
+                val shape = shape tensor
+                val next = Index.next shape
+            in
+                (Array.foldl 
+                     (fn (v,i) => (f (i,v); valOf (next i)))
+                     (Index.first shape) 
+                     (toArray tensor); ())
+            end
         fun app f tensor = Array.app f (toArray tensor)
         fun all f tensor =
             let val a = toArray tensor
@@ -2972,7 +2999,16 @@ structure MonoTensor  =
                 else
                     raise Match
         end
-        fun appi f tensor = Array.appi f (toArray tensor, 0, NONE)
+        fun appi f tensor = 
+            let 
+                val shape = shape tensor
+                val next = Index.next shape
+            in
+                (Array.foldl 
+                     (fn (v,i) => (f (i,v); valOf (next i)))
+                     (Index.first shape) 
+                     (toArray tensor); ())
+            end
         fun app f tensor = Array.app f (toArray tensor)
         fun all f tensor =
             let val a = toArray tensor

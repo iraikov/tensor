@@ -69,6 +69,11 @@ val _ = Loop.app
                             sl
                     end)
 
+val _ = SparseMatrix.appi 
+            (fn (i,v) => (putStr TextIO.stdOut "SA[";
+                          TensorFile.listLineWrite Int.toString TextIO.stdOut i;
+                          putStrLn TextIO.stdOut ("]: " ^ (Real.toString v))))
+            SA
 
 val _ = putStrLn TextIO.stdOut "SparseMatrix fromTensor:"
 
@@ -120,7 +125,6 @@ val _ = Loop.app
                             sl
                     end)
 
-val blocks = #blocks SA
 
 val _ = putStrLn TextIO.stdOut "SparseMatrix fromTensorList:"
 
@@ -139,12 +143,11 @@ val SB = SparseMatrix.fromTensorList
               
              ]
 
-val blocks = #blocks SB
 val _ = Loop.app
             (0,10,fn (j) => 
                     Loop.app (0,10,fn (i) => 
                                      (
-                                      print ("SA(" ^ (Int.toString i) ^ "," ^ (Int.toString j) ^ ") = "); 
+                                      print ("SB(" ^ (Int.toString i) ^ "," ^ (Int.toString j) ^ ") = "); 
                                       TensorFile.realWrite 
                                           (TextIO.stdOut) 
                                           (SparseMatrix.sub (SB,[i,j]))
@@ -161,3 +164,16 @@ val _ = Loop.app
                             (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
                             sl
                     end)
+
+val SC = SparseMatrix.*> 2.0 SB
+
+val _ = Loop.app
+            (0,10,fn (j) => 
+                    Loop.app (0,10,fn (i) => 
+                                     (
+                                      print ("SC(" ^ (Int.toString i) ^ "," ^ (Int.toString j) ^ ") = "); 
+                                      TensorFile.realWrite 
+                                          (TextIO.stdOut) 
+                                          (SparseMatrix.sub (SC,[i,j]))
+                                     )
+            ))

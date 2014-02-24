@@ -308,4 +308,34 @@ val diagtensor = fromDiag (4, 4, Real64Array.fromList [1.0, 2.0, 3.0], 0.0)
 
 val _  = TensorFile.realTensorWrite (TextIO.stdOut) diagtensor
 
+fun convolve hs xs =
+  let 
+      val [m,_] = RTensor.shape hs
+      val [n,_] = RTensor.shape xs
+      val outputLen = m + n - 1
+      val y = RTensor.new ([outputLen, 1], 0.0)
+  in
+      Loop.app (0, outputLen, 
+                (fn (i) =>
+                    Loop.app (0, m, 
+                              fn (j) => 
+                              (if (i - j) >= 0 andalso (i - j) < n
+                               then (let val yi  = RTensor.sub (y,[i,0])
+                                         val xij = RTensor.sub (xs,[i-j,0])
+                                         val hj  = RTensor.sub (hs,[j,0])
+                                     in
+                                         RTensor.update (y, [i,0], Real.+ (yi, Real.* (xij, hj)))
+                                     end)
+                               else ()))
+               ));
+      y
+  end
+
+
+val t = convolve (RTensor.fromList ([3,1],[1.0, 2.0, 3.0]))
+                 (RTensor.fromList ([3,1],[0.0, 1.0, 0.5]))
+
+val _  = TensorFile.realTensorWrite (TextIO.stdOut) t
+
+
 end

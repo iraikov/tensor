@@ -100,11 +100,8 @@ fun disc2D (shape, center, radius) =
                                                [x,y] => dist2D (Real.fromInt x, Real.fromInt y) 
                                              | _ => raise Index)
     in
-        D
+        RTensor.map (fn (x) => if Real.<= (x, radius) then x else 0.0) D
     end
-
-(*    return np.where(D<=radius,True,False).astype(np.float32) *)
-
 
 
 end

@@ -312,8 +312,6 @@ fun convolve hs xs =
   let 
       val [m,_] = RTensor.shape hs
       val [n,_] = RTensor.shape xs
-      val _ = (print ("m = " ^ (Int.toString m) ^ "\n"))
-      val _ = (print ("n = " ^ (Int.toString n) ^ "\n"))
       val outputLen = m + n - 1
       val y = RTensor.new ([outputLen, 1], 0.0)
   in
@@ -321,9 +319,7 @@ fun convolve hs xs =
                 (fn (i) =>
                     Loop.app (0, m, 
                               fn (j) => 
-                              (print ("i = " ^ (Int.toString i) ^ "\n");
-                               print ("j = " ^ (Int.toString j) ^ "\n");
-                               if (i - j) >= 0 andalso (i - j) < n
+                              (if (i - j) >= 0 andalso (i - j) < n
                                then (let val yi  = RTensor.sub (y,[i,0])
                                          val xij = RTensor.sub (xs,[i-j,0])
                                          val hj  = RTensor.sub (hs,[j,0])

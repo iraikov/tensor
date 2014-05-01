@@ -179,6 +179,8 @@ structure Loop =
         Reduced comparisons which are defined in terms of 'compare'.
   +,-
         Index addition and subtraction
+  incr,decr
+        Index increment and decrement by a constant
 
   validShape t
   validIndex t
@@ -468,7 +470,8 @@ structure Index : INDEX =
     fun a - b = ListPair.map Int.- (a,b)
     fun a + b = ListPair.map Int.+ (a,b)
                 
-    fun decr a = List.map (fn (x) => Int.-(x,1)) a
+    fun decr n a = List.map (fn (x) => Int.-(x,n)) a
+    fun incr n a = List.map (fn (x) => Int.+(x,n)) a
                  
   end
 

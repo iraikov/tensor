@@ -74,6 +74,11 @@ compare(a,b)
   <,>,eq,<=,>=,<>
         Reduced comparisons which are defined in terms of 'compare'.
 
++,-
+        Index addition and subtraction
+incr,decr
+        Index increment and decrement by a constant
+
 validShape t
 validIndex t
         Checks whether 't' conforms a valid shape or index.
@@ -81,7 +86,7 @@ validIndex t
 iteri shape f
 
 
-TENSOR
+TENSOR         -Signature-      
 
 Polymorphic tensors of any type. With 'tensor' we denote a (mutable)
 array of any rank, with as many indices as one wishes, and that may

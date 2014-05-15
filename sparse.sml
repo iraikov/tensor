@@ -105,9 +105,12 @@ signature MONO_SPARSE_MATRIX =
 
         type index = Index.t
 	type elem = Number.t
+
 	type matrix
 
 	exception Data and Shape
+
+	val zero : Number.t
 
 	val fromList : index -> ((int * (int * elem) list) list * index * (index option)) -> matrix
 	val fromTensor : index -> (Tensor.tensor * (index option)) -> matrix
@@ -278,6 +281,9 @@ struct
     type index   = Index.t
     type nonzero = Index.nonzero
     type elem    = Number.t
+
+    val zero     = Number.zero
+
     datatype block = 
              SPARSE of {offset: index, shape: index, nz: nonzero, data: Tensor.Array.array}
            | DENSE of {offset: index, data: Tensor.tensor}
@@ -341,7 +347,7 @@ struct
                     val _ = List.app 
                                 (fn (icol,lst) => 
                                     case lst of
-                                        [(irow,v)] => if not (Number.== (v,Number.zero))
+                                        [(irow,v)] => if not (Number.== (v,zero))
                                                       then (Array.update (data, icol, SOME (DynArray.fromList [(irow,v)]));
                                                             nzcount := (!nzcount) + 1)
                                                       else ()
@@ -349,7 +355,7 @@ struct
                                         (Array.update (data, icol, SOME (DynArray.fromList lst));
                                          nzcount := (!nzcount) + (List.length lst))
                                       | [] => ()) a
-                    val data'   = Tensor.Array.array (!nzcount, Number.zero)
+                    val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (cols, 0)
                     val update  = IntArray.update
@@ -380,7 +386,7 @@ struct
                     val _ = List.app 
                                 (fn (irow,lst) => 
                                     case lst of
-                                        [(icol,v)] => if not (Number.== (v,Number.zero))
+                                        [(icol,v)] => if not (Number.== (v,zero))
                                                       then (Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
                                                             nzcount := (!nzcount) + 1)
                                                       else ()
@@ -388,7 +394,7 @@ struct
                                         (Array.update (data, irow, SOME (DynArray.fromList lst));
                                          nzcount := (!nzcount) + (List.length lst))
                                       | [] => ()) a
-                    val data'   = Tensor.Array.array (!nzcount, Number.zero)
+                    val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
                     val update  = IntArray.update
@@ -429,7 +435,7 @@ struct
                                           let 
                                               val v = Tensor.sub (a, i)
                                           in
-                                              if not (Number.== (v, Number.zero))
+                                              if not (Number.== (v, zero))
                                               then
                                                   let 
                                                       val (irow,icol) = dimVals i
@@ -444,7 +450,7 @@ struct
                                                   end
                                               else ()
                                           end)
-                    val data'   = Tensor.Array.array (!nzcount, Number.zero)
+                    val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (cols, 0)
                     val update  = IntArray.update
@@ -478,7 +484,7 @@ struct
                                                   let 
                                                       val v = Tensor.sub (a, i)
                                                   in
-                                                      if not (Number.== (v, Number.zero))
+                                                      if not (Number.== (v, zero))
                                                       then
                                                           let 
                                                               val (irow,icol) = dimVals i
@@ -493,7 +499,7 @@ struct
                                                           end
                                                       else ()
                                                   end)
-                    val data'   = Tensor.Array.array (!nzcount, Number.zero)
+                    val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
                     val update  = IntArray.update
@@ -545,7 +551,7 @@ struct
                                     let 
                                         val v = f (i)
                                     in
-                                        if not (Number.== (v, Number.zero))
+                                        if not (Number.== (v, zero))
                                         then
                                             let 
                                                 val (irow,icol) = dimVals i
@@ -560,7 +566,7 @@ struct
                                             end
                                         else ()
                                     end)
-                    val data'   = Tensor.Array.array (!nzcount, Number.zero)
+                    val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (cols, 0)
                     val update  = IntArray.update
@@ -593,7 +599,7 @@ struct
                                                   let 
                                                       val v = f (i)
                                                   in
-                                                      if not (Number.== (v, Number.zero))
+                                                      if not (Number.== (v, zero))
                                                       then
                                                           let 
                                                               val (irow,icol) = dimVals i
@@ -606,7 +612,7 @@ struct
                                                           end
                                                       else ()
                                                   end)
-                    val data'   = Tensor.Array.array (!nzcount, Number.zero)
+                    val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
                     val update  = IntArray.update
@@ -768,7 +774,7 @@ struct
                          val p = Index.toInt shape nz [i-m,j-n]
                        in
                            case p of SOME p' => Tensor.Array.sub (data, p')
-                                   | NONE => Number.zero
+                                   | NONE => zero
                        end)
                      | DENSE {offset, data} => 
                      (let 
@@ -777,7 +783,7 @@ struct
                            Tensor.sub (data,[i+m,j+n])
                        end)
                 )
-              | NONE => Number.zero
+              | NONE => zero
         end
 
     fun update ({shape,blocks},index,new) =
@@ -857,7 +863,7 @@ struct
                                                       then IntArray.sub (indptr, i'+1) 
                                                       else Tensor.Array.length data)
                                            val len = e-s
-                                           val res = Tensor.Array.array (len, Number.zero)
+                                           val res = Tensor.Array.array (len, zero)
                                            val rsi = IntArray.array (len, 0)
                                            fun loop (i,n) = if i < e 
                                                             then (Tensor.Array.update (res,n,Tensor.Array.sub (data,i));
@@ -877,7 +883,7 @@ struct
                                                       then IntArray.sub (indptr, i'+1) 
                                                       else Tensor.Array.length data)
                                            val len = e-s
-                                           val res = Tensor.Array.array (len, Number.zero)
+                                           val res = Tensor.Array.array (len, zero)
                                            val rsi = IntArray.array (len, 0)
                                            fun loop (i,n) = if i < e 
                                                             then (Tensor.Array.update (res,n,Tensor.Array.sub (data,i));
@@ -987,7 +993,7 @@ struct
                               (if Index.eq (offset',offset'') andalso 
                                   Index.eq (shape',shape'')
                                then (let 
-                                         val t = Tensor.new (shape', Number.zero)
+                                         val t = Tensor.new (shape', zero)
                                          val _ = Index.iteri shape' nz' 
                                                              (fn (idx,i) => Tensor.update (t,idx,Tensor.Array.sub (data',i)))
                                          val _ = Index.iteri shape' nz'' 

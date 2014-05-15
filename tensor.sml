@@ -1540,19 +1540,6 @@ signature NUMBER =
     sig
         type t
         val zero : t
-        val one  : t
-        val ~ : t -> t
-        val + : t * t -> t
-        val - : t * t -> t
-        val * : t * t -> t
-        val / : t * t -> t
-        val toString : t -> string
-    end
-
-signature NUMBER =
-    sig
-        type t
-        val zero : t
         val one : t
 
         val + : t * t -> t

@@ -218,7 +218,6 @@ signature INDEX =
         val <> : t * t -> bool
         val - : t * t -> t
         val + : t * t -> t
-        val decr: t -> t
 
         val validShape : t -> bool
         val validIndex : t -> bool

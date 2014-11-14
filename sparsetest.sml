@@ -38,6 +38,46 @@ fun realRandomTensor (xseed,yseed) shape =
         loop (length - 1)
     end
 
+val _ = putStrLn TextIO.stdOut "SparseMatrix fromListGenerator:"
+
+val seed   = Random.rand (13,17)
+val prob   = 0.1
+val SA     = SparseMatrix.fromListGenerator
+                 [10,10] 
+                 (fn (i) => List.filter 
+                                (fn(j,r) => Real.>= (r, prob)) 
+                                (List.tabulate (4, (fn(j) => (j,Random.randReal seed)))),
+                  [4,4], 
+                  SOME [5,5])
+
+val _ = Loop.app
+            (0,10,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (SA,1,i) 
+                    in
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
+                    end)
+
+val _ = Loop.app
+            (0,10,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice row " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (SA,0,i) 
+                    in
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
+                    end)
+
+val _ = SparseMatrix.appi 
+            (fn (i,v) => (putStr TextIO.stdOut "SA[";
+                          TensorFile.listLineWrite Int.toString TextIO.stdOut i;
+                          putStrLn TextIO.stdOut ("]: " ^ (Real.toString v))))
+            SA
+
 val _ = putStrLn TextIO.stdOut "SparseMatrix fromGenerator:"
 
 val seed   = Random.rand (13,17)

@@ -57,8 +57,12 @@ val v = RTensor.sub (A,[3,1])
 val _ = (print "A(3,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
 
 val _ = print "slice: "
+val sl = RTensorSlice.slice ([([0,1],[2,1])],A)
+val _  = TensorFile.realTensorLineWrite (TextIO.stdOut) (RTensorSlice.map (fn (x) => x) sl)
+
+val _ = print "slice: "
 val sl = RTensorSlice.slice ([([3,0],[3,1]),([1,0],[1,1])],A)
-val _  = TensorFile.realTensorWrite (TextIO.stdOut) (RTensorSlice.map (fn (x) => x) sl)
+val _  = TensorFile.realTensorLineWrite (TextIO.stdOut) (RTensorSlice.map (fn (x) => x) sl)
 
 val _ = print "realRandomTensor: "
 

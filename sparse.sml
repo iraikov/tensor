@@ -105,6 +105,7 @@ signature MONO_SPARSE_MATRIX =
         structure Map : ORD_MAP
 
         type index = Index.t
+        type storage = Index.storage
 	type elem = Number.t
 
 	type matrix
@@ -118,7 +119,7 @@ signature MONO_SPARSE_MATRIX =
 	val fromTensorList : index -> {tensor: Tensor.tensor, offset: index, sparse: bool} list -> matrix
 	val fromGenerator : index -> ((index -> elem) * index * (index option)) -> matrix
 	val fromGeneratorList : index -> ({f: (index -> elem), fshape: index, offset: index} list) -> matrix
-	val fromMapGenerator : index -> ((int -> elem Map.map) * Index.storage * index * (index option)) -> matrix
+	val fromMapGenerator : index -> ((int -> elem Map.map) * storage * index * (index option)) -> matrix
         val insert : matrix * matrix -> matrix
 
 	val shape : matrix -> index
@@ -282,6 +283,7 @@ struct
     structure Map = IntMap
 
     type index   = Index.t
+    type storage = Index.storage
     type nonzero = Index.nonzero
     type elem    = Number.t
 
@@ -881,6 +883,22 @@ struct
                          insertBlock (S,b',offset)
                  end)
                  (fromGenerator shape (f,fshape,SOME offset)) rst)
+            | _ => raise Match
+
+    fun fromMapGeneratorList shape (gg: ({f: int -> elem Map.map, forder: storage, fshape: index, offset: index}) list) = 
+        case gg of 
+            ({f,forder,fshape,offset}::rst) =>
+            (List.foldl 
+                 (fn ({f,forder,fshape,offset},S) => 
+                     let
+                         val {shape=_, blocks=bs} = fromMapGenerator shape (f,forder,fshape,SOME offset)
+                         val b': block = case bs of
+                                             [b] => b
+                                           | _ => raise Match
+                     in
+                         insertBlock (S,b',offset)
+                 end)
+                 (fromMapGenerator shape (f,forder,fshape,SOME offset)) rst)
             | _ => raise Match
 
 

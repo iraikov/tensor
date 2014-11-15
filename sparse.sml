@@ -102,6 +102,7 @@ signature MONO_SPARSE_MATRIX =
 	structure TensorSlice : MONO_TENSOR_SLICE
 	structure Number : NUMBER
 	structure Index : SPARSE_INDEX
+        structure Map : ORD_MAP
 
         type index = Index.t
 	type elem = Number.t
@@ -117,7 +118,7 @@ signature MONO_SPARSE_MATRIX =
 	val fromTensorList : index -> {tensor: Tensor.tensor, offset: index, sparse: bool} list -> matrix
 	val fromGenerator : index -> ((index -> elem) * index * (index option)) -> matrix
 	val fromGeneratorList : index -> ({f: (index -> elem), fshape: index, offset: index} list) -> matrix
-	val fromListGenerator : index -> ((index -> (int * elem) list) * index * (index option)) -> matrix
+	val fromMapGenerator : index -> ((int -> elem Map.map) * Index.storage * index * (index option)) -> matrix
         val insert : matrix * matrix -> matrix
 
 	val shape : matrix -> index
@@ -278,6 +279,7 @@ struct
     structure TensorSlice : MONO_TENSOR_SLICE = RTensorSlice
     structure Number = RTensor.Number
     structure Index = SparseIndex
+    structure Map = IntMap
 
     type index   = Index.t
     type nonzero = Index.nonzero
@@ -639,41 +641,63 @@ struct
         end)
 
 
-    fun fromListGenerator shape (f: index -> (int * elem) list, fshape, offset) = 
+    fun fromMapGenerator shape (f: int -> elem Map.map, forder, fshape, offset) = 
         (let 
              val (rows,cols) = dimVals fshape
         in
             case Index.order of
                 Index.CSC =>
                 let 
-	            val data: (((int * elem) DynArray.array) option) Array.array = Array.array(cols,NONE)
                     val nzcount = ref 0
-                    val _ = Loop.app (0, cols,
-                                      (fn (icol) => 
-                                          let
-                                              val lst = f ([rows,icol])
-                                          in
-                                              case lst of
-                                                  [(irow,v)] => 
-                                                  if not (Number.== (v,zero))
-                                                  then (Array.update (data, icol, SOME (DynArray.fromList [(irow,v)]));
-                                                        nzcount := (!nzcount) + 1)
-                                                  else ()
-                                                | (_ :: _) => 
-                                                  (Array.update (data, icol, SOME (DynArray.fromList lst));
-                                                   nzcount := (!nzcount) + (List.length lst))
-                                                | [] => ()
-                                          end))
-                    val data'   = Tensor.Array.array (!nzcount, zero)
+                    val columnData: ((elem Map.map) option) Array.array  = 
+                        Array.array(cols,NONE)
+
+                    val _  = 
+                        case forder of 
+                            Index.CSC => 
+                            Loop.app
+                                (0, cols,
+                                 (fn (icol) => 
+                                     let
+                                         val m = f icol
+                                     in
+                                         if not (Map.isEmpty m)
+                                         then (Array.update (columnData,icol,SOME m);
+                                               nzcount := (!nzcount) + Map.numItems (m))
+                                         else ()
+                                     end))
+                            | Index.CSR =>
+                            Loop.app
+                                (0, rows,
+                                 (fn (irow) => 
+                                     let
+                                         val m = f irow
+                                     in
+                                         IntMap.appi
+                                             (fn (colind,v) =>
+                                                 case Array.sub (columnData,colind) of
+                                                     SOME m' => 
+                                                     (let val m'' = Map.insert(m',irow,v)
+                                                      in
+                                                          Array.update (columnData,colind,SOME m'');
+                                                          nzcount := (!nzcount) + 1
+                                                      end)
+                                                   | NONE => (Array.update (columnData,colind,
+                                                                            SOME (IntMap.singleton(irow,v)));
+                                                              nzcount := (!nzcount) + 1))
+                                             m
+                                     end))
+
+                    val data    = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (cols, 0)
                     val update  = IntArray.update
                     val fi      = Array.foldli
                                       (fn (n,SOME cols,i) => 
                                           let 
-                                              val i' = DynArray.foldr
-                                                           (fn ((rowind,v),i) => 
-                                                               (Tensor.Array.update (data',i,v); 
+                                              val i' = IntMap.foldri
+                                                           (fn (rowind,v,i) => 
+                                                               (Tensor.Array.update (data,i,v); 
                                                                 update (indices,i,rowind); 
                                                                 i+1))
                                                            i cols
@@ -681,43 +705,66 @@ struct
                                               (update (indptr,n,i); i')
                                           end
                                       | (n,NONE,i) => (update (indptr,n,i); i))
-                                      0 data
+                                      0 columnData
                 in
                     {shape=shape,
                      blocks=[SPARSE {offset=case offset of NONE => [0, 0] | SOME i => i, 
                                      shape=fshape, nz={ indptr= indptr, indices=indices }, 
-                                     data=data'}]}
+                                     data=data}]}
                 end
               | Index.CSR => 
                 let 
-	            val data: (((int * elem) DynArray.array) option) Array.array  = Array.array(rows,NONE)
+
                     val nzcount = ref 0
-                    val _ = Loop.app (0, rows,
-                                      (fn (irow) => 
-                                          let
-                                              val lst = f ([irow,cols])
-                                          in
-                                              case lst of
-                                                  [(icol,v)] => 
-                                                  if not (Number.== (v,zero))
-                                                  then (Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
-                                                        nzcount := (!nzcount) + 1)
-                                                  else ()
-                                                | (_ :: _) => 
-                                                  (Array.update (data, irow, SOME (DynArray.fromList lst));
-                                                   nzcount := (!nzcount) + (List.length lst))
-                                                | [] => ()
-                                          end))
-                    val data'   = Tensor.Array.array (!nzcount, zero)
+                    val rowData: ((elem Map.map) option) Array.array  = 
+                        Array.array(cols,NONE)
+
+                    val _  = 
+                        case forder of 
+                            Index.CSR => 
+                            Loop.app
+                            (0, rows,
+                             (fn (irow) => 
+                                 let
+                                     val m = f irow
+                                 in
+                                     if not (Map.isEmpty m)
+                                     then (Array.update (rowData,irow,SOME m);
+                                           nzcount := (!nzcount) + Map.numItems (m))
+                                     else ()
+                                 end))
+                            | Index.CSC =>
+                              Loop.app
+                                (0, cols,
+                                 (fn (icol) => 
+                                     let
+                                         val m = f icol
+                                     in
+                                         IntMap.appi
+                                             (fn (rowind,v) =>
+                                                 case Array.sub (rowData,rowind) of
+                                                     SOME m' => 
+                                                     (let val m'' = Map.insert(m',icol,v)
+                                                      in
+                                                          Array.update (rowData,rowind,SOME m'');
+                                                          nzcount := (!nzcount) + 1
+                                                      end)
+                                                   | NONE => (Array.update (rowData,rowind,
+                                                                            SOME (IntMap.singleton(icol,v)));
+                                                              nzcount := (!nzcount) + 1))
+                                             m
+                                     end))
+
+                    val data    = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
                     val update  = IntArray.update
                     val fi      = Array.foldli
                                       (fn (n,SOME rows,i) => 
                                           let 
-                                              val i' = DynArray.foldr 
-                                                           (fn ((colind,v),i) => 
-                                                               (Tensor.Array.update (data',i,v); 
+                                              val i' = IntMap.foldri
+                                                           (fn (colind,v,i) => 
+                                                               (Tensor.Array.update (data,i,v); 
                                                                 update (indices,i,colind); 
                                                                 i+1))
                                                            i rows
@@ -725,11 +772,11 @@ struct
                                               (update (indptr,n,i); i')
                                           end
                                       | (n,NONE,i) => (update (indptr,n,i); i))
-                                      0 data
+                                      0 rowData
                 in
                     {shape=shape, 
                      blocks=[SPARSE {offset = case offset of NONE => [0,0] | SOME i => i, 
-                                     shape=fshape, nz={ indptr= indptr, indices=indices }, data=data'}]}
+                                     shape=fshape, nz={ indptr= indptr, indices=indices }, data=data}]}
                 end
         end)
 

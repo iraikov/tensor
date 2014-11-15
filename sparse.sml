@@ -1,6 +1,6 @@
 
 (*
- Copyright 2013 Ivan Raikov.
+ Copyright 2013-2014 Ivan Raikov.
  All rights reserved.
 
 Redistribution and use in source and binary forms, with or
@@ -435,26 +435,27 @@ struct
 	            val data: (((int * elem) DynArray.array) option) Array.array  = 
                         Array.array(cols,NONE)
                     val nzcount = ref 0
-                    val _ = Tensor.Index.app (List.rev shape_a)
-                                      (fn (i) => 
-                                          let 
-                                              val v = Tensor.sub (a, i)
-                                          in
-                                              if not (Number.== (v, zero))
-                                              then
-                                                  let 
-                                                      val (irow,icol) = dimVals i
-                                                      val colv  = Array.sub (data, icol)
-                                                      (*val col' = (irow,v) :: col*)
-                                                  in
-                                                      (case colv of
-                                                          SOME col => 
-                                                          (DynArray.update(col,DynArray.length col,(irow,v)))
-                                                        | NONE => Array.update (data, icol, SOME (DynArray.fromList [(irow,v)]));
-                                                       nzcount := (!nzcount) + 1)
-                                                  end
-                                              else ()
-                                          end)
+                    val _ = Tensor.Index.app
+                                (List.rev shape_a)
+                                (fn (i) => 
+                                    let 
+                                        val v = Tensor.sub (a, i)
+                                    in
+                                        if not (Number.== (v, zero))
+                                        then
+                                            let 
+                                                val (irow,icol) = dimVals i
+                                                val colv  = Array.sub (data, icol)
+                                            (*val col' = (irow,v) :: col*)
+                                            in
+                                                (case colv of
+                                                     SOME col => 
+                                                     (DynArray.update(col,DynArray.length col,(irow,v)))
+                                                   | NONE => Array.update (data, icol, SOME (DynArray.fromList [(irow,v)]));
+                                                 nzcount := (!nzcount) + 1)
+                                            end
+                                        else ()
+                                    end)
                     val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (cols, 0)
@@ -484,26 +485,28 @@ struct
 	            val data: (((int * elem) DynArray.array) option) Array.array  = 
                         Array.array(rows,NONE)
                     val nzcount = ref 0
-                    val _ = Tensor.Index.app shape_a
-                                              (fn (i) => 
-                                                  let 
-                                                      val v = Tensor.sub (a, i)
-                                                  in
-                                                      if not (Number.== (v, zero))
-                                                      then
-                                                          let 
-                                                              val (irow,icol) = dimVals i
-                                                              val rowv  = Array.sub (data, irow)
-                                                              (*val row' = (icol,v) :: row*)
-                                                          in
-                                                              (case rowv of
-                                                                   (*Array.update(data,irow,row');*)
-                                                                   SOME row => DynArray.update (row,DynArray.length row,(icol,v))
-                                                                 | NONE => Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
-                                                               nzcount := (!nzcount) + 1)
-                                                          end
-                                                      else ()
-                                                  end)
+                    val _ = 
+                        Tensor.Index.app 
+                            shape_a
+                            (fn (i) => 
+                                let 
+                                    val v = Tensor.sub (a, i)
+                                in
+                                    if not (Number.== (v, zero))
+                                    then
+                                        let 
+                                            val (irow,icol) = dimVals i
+                                            val rowv  = Array.sub (data, irow)
+                                        (*val row' = (icol,v) :: row*)
+                                        in
+                                            (case rowv of
+                                                 (*Array.update(data,irow,row');*)
+                                                 SOME row => DynArray.update (row,DynArray.length row,(icol,v))
+                                               | NONE => Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
+                                             nzcount := (!nzcount) + 1)
+                                        end
+                                    else ()
+                                end)
                     val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
@@ -599,24 +602,25 @@ struct
 	            val data: (((int * elem) DynArray.array) option) Array.array  = 
                         Array.array(rows,NONE)
                     val nzcount = ref 0
-                    val _ = Tensor.Index.app fshape
-                                              (fn (i) => 
-                                                  let 
-                                                      val v = f (i)
-                                                  in
-                                                      if not (Number.== (v, zero))
-                                                      then
-                                                          let 
-                                                              val (irow,icol) = dimVals i
-                                                              val rowv  = Array.sub (data, irow)
-                                                          in
-                                                              (case rowv of
-                                                                   SOME row => DynArray.update (row,DynArray.length row,(icol,v))
-                                                                 | NONE => Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
-                                                               nzcount := (!nzcount) + 1)
-                                                          end
-                                                      else ()
-                                                  end)
+                    val _ = Tensor.Index.app 
+                                fshape
+                                (fn (i) => 
+                                    let 
+                                        val v = f (i)
+                                    in
+                                        if not (Number.== (v, zero))
+                                        then
+                                            let 
+                                                val (irow,icol) = dimVals i
+                                                val rowv  = Array.sub (data, irow)
+                                            in
+                                                (case rowv of
+                                                     SOME row => DynArray.update (row,DynArray.length row,(icol,v))
+                                                   | NONE => Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
+                                                 nzcount := (!nzcount) + 1)
+                                            end
+                                        else ()
+                                    end)
                     val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
@@ -849,10 +853,10 @@ struct
   
        {tensor,offset=[xoffset,yoffset],sparse) ...
 
-     where xoffset and yoffset are the positions where to insert the
-     given tensor. The tensors to be inserted must be non-overlapping.
-     sparse is a boolean flag that indicates whether the tensor should
-     be converted to sparse form.
+      where xoffset and yoffset are the positions where to insert the
+      given tensor. The tensors to be inserted must be non-overlapping.
+      sparse is a boolean flag that indicates whether the tensor should
+      be converted to sparse form.
     *)
 
     fun fromTensorList shape (al: ({tensor: Tensor.tensor, offset: index, sparse: bool}) list) = 

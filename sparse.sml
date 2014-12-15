@@ -120,6 +120,7 @@ signature MONO_SPARSE_MATRIX =
 	val fromGenerator : index -> ((index -> elem) * index * (index option)) -> matrix
 	val fromGeneratorList : index -> ({f: (index -> elem), fshape: index, offset: index} list) -> matrix
 	val fromMapGenerator : index -> ((int -> elem Map.map) * storage * index * (index option)) -> matrix
+        val fromMapGeneratorList : index -> ({f: int -> elem Map.map, forder: storage, fshape: index, offset: index} list) -> matrix
         val insert : matrix * matrix -> matrix
 
 	val shape : matrix -> index

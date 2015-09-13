@@ -126,6 +126,7 @@ signature MONO_SPARSE_MATRIX =
 	val shape : matrix -> index
 
 	val sub : matrix * index -> elem
+	val sub' : matrix * index -> elem option
 	val update : matrix * index * elem -> unit
 
 	val map : (elem -> elem) -> matrix -> matrix
@@ -942,6 +943,32 @@ struct
                        end)
                 )
               | NONE => zero
+        end
+
+    fun sub' ({shape, blocks},index) =
+        let
+            val (i,j) = dimVals index
+            val block = findBlock (i,j,blocks)
+        in
+            case block of
+                SOME (b) => 
+                (case b of 
+                     SPARSE {offset, shape, nz, data} => 
+                     (let 
+                         val (m,n) = dimVals offset
+                         val p = Index.toInt shape nz [i-m,j-n]
+                       in
+                           case p of SOME p' => SOME (Tensor.Array.sub (data, p'))
+                                   | NONE => NONE
+                       end)
+                     | DENSE {offset, data} => 
+                     (let 
+                         val (m,n) = dimVals offset
+                       in
+                           SOME (Tensor.sub (data,[i+m,j+n]))
+                       end)
+                )
+              | NONE => NONE
         end
 
     fun update ({shape,blocks},index,new) =

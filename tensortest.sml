@@ -342,4 +342,30 @@ val t = convolve (RTensor.fromList ([3,1],[1.0, 2.0, 3.0]))
 val _  = TensorFile.realTensorWrite (TextIO.stdOut) t
 
 
+val SA  = RTensor.fromList 
+              ([6,6], 
+               List.concat
+                   [
+                     [10.0,3.0,0.0,3.0,0.0,0.0],
+                     [0.0,9.0,7.0,0.0,8.0,4.0],
+                     [0.0,0.0,8.0,8.0,0.0,0.0],
+                     [0.0,0.0,7.0,7.0,9.0,0.0],
+                     [~2.0,0.0,0.0,5.0,9.0,2.0],
+                     [0.0,3.0,0.0,0.0,13.0,~1.0]
+              ])
+
+
+val _ = Loop.app
+            (0,6,fn (i) => 
+                    Loop.app (0,6,fn (j) => 
+                                     (
+                                      print ("SA(" ^ (Int.toString i) ^ "," ^ (Int.toString j) ^ ") = "); 
+                                      TensorFile.realWrite 
+                                          (TextIO.stdOut) 
+                                          (RTensor.sub (SA,[i,j]))
+                                     )
+            ))
+
+
+
 end

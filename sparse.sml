@@ -194,25 +194,22 @@ structure SparseIndex =
                     (case (index, shape) of
                          ([i,j],[s,rs]) => 
                          let
-                             val s = sub (indptr, j)
-                             val e = if (j < (nptr-1)) then sub (indptr,j+1) else nind
+                             val s = sub (indptr, i)
+                             val e = if (i < (nptr-1)) then sub (indptr,i+1) else nind
                          in
-                             findFromTo (i, indices, s, e)
+                             findFromTo (j, indices, s, e)
                          end
                        | ([],[]) => SOME 0
                        | (_,_)   => raise Index)
                   | CSC => 
                     (case (index, shape) of
                          ([i,j],[s,rs]) => 
-                         if (i >= 0) andalso (i < s) 
-                         then
-                             (let
-                                  val s = sub (indptr,i)
-                                  val e = if (i < (nptr-1)) then sub (indptr,i+1) else nind
-                              in
-                                  findFromTo (j, indices, s, e)
-                              end)
-                         else raise Index
+                         let
+                             val s = sub (indptr, j)
+                             val e = if (j < (nptr-1)) then sub (indptr,j+1) else nind
+                         in
+                             findFromTo (i, indices, s, e)
+                         end
                        | ([],[]) => SOME 0
                        | (_,_)   => raise Index)
                     

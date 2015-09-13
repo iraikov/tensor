@@ -176,14 +176,8 @@ structure SparseIndex =
 
         val sub = IntArray.sub
 
-        fun findFromTo (i,v,s,e) =
-            let fun loop (j) = 
-                    if ((j >= s) andalso (j < e)) 
-                    then (if (sub (v,j) = i) then SOME j else loop (j+1))
-                    else NONE
-            in
-                loop s
-            end
+        fun findFromTo (i,v,s,e) = 
+            Loop.find (s,e-1,fn(j) => (if (sub (v,j) = i) then SOME j else NONE)) 
             
         fun inBounds shape index =
 	    ListPair.all (fn (x,y) => (x >= 0) andalso (x < y))

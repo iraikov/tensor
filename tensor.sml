@@ -85,6 +85,19 @@ structure Loop =
             else
                 any (a+1, b, f)
 
+        fun find (a, b, f) =
+            if a = b 
+            then NONE
+            else (let
+                     val v1 = f a
+                 in
+                     case v1 of 
+                         SOME _ => v1
+                       | NONE => (let val v2 = f b 
+                                  in case v2 of SOME _ => v2 | NONE => find (a+1, b-1, f) 
+                                  end)
+                 end)
+
         fun app (a, b, f) =
             if a < b then
                 (f a; app (a+1, b, f))

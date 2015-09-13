@@ -86,7 +86,7 @@ structure Loop =
                 any (a+1, b, f)
 
         fun find (a, b, f) =
-            if a = b 
+            if a >= b 
             then NONE
             else (let
                      val v1 = f a
@@ -2312,6 +2312,7 @@ structure MonoTensor  =
                         f (Array.sub(a, i)))
             end
         fun foldl f init tensor = Array.foldl f init (toArray tensor)
+
         fun foldln f init {shape, indexer, data=a} index =
             let val (head,lk,tail) = splitList(shape, index)
                 val li = Index.length head
@@ -3023,6 +3024,7 @@ structure MonoTensor  =
                         f (Array.sub(a, i)))
             end
         fun foldl f init tensor = Array.foldl f init (toArray tensor)
+
         fun foldln f init {shape, indexer, data=a} index =
             let val (head,lk,tail) = splitList(shape, index)
                 val li = Index.length head

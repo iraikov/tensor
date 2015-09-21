@@ -115,6 +115,7 @@ signature MONO_SPARSE_MATRIX =
 	val zero : Number.t
 
 	val fromList : index -> ((int * (int * elem) list) list * index * (index option)) -> matrix
+	val fromLists : index -> ({l: (int * (int * elem) list) list, shape_l: index, offset: index} list) -> matrix
 	val fromTensor : index -> (Tensor.tensor * (index option)) -> matrix
 	val fromTensorList : index -> {tensor: Tensor.tensor, offset: index, sparse: bool} list -> matrix
 	val fromGenerator : index -> ((index -> elem) * index * (index option)) -> matrix
@@ -331,6 +332,28 @@ struct
         end
 
 
+    fun buildSparseFromArrayList (data, data', indptr, indices) =
+        let
+            val update  = IntArray.update
+        in
+            Array.foldli
+                (fn (n,SOME cols,i) => 
+                    let 
+                        
+
+                        val i' = List.foldr
+                                     (fn ((vind,v),i) => 
+                                         (Tensor.Array.update (data',i,v); 
+                                          update (indices,i,vind); 
+                                          i+1))
+                                     i cols
+                    in
+                        (update (indptr,n,i); i')
+                    end
+                | (n,NONE,i) => (update (indptr,n,i); i))
+                0 data
+        end
+
     fun buildSparseFromArray (data, data', indptr, indices) =
         let
             val update  = IntArray.update
@@ -381,24 +404,24 @@ struct
             case Index.order of
                 Index.CSC =>
                 let 
-	            val data: (((int * elem) DynArray.array) option) Array.array = Array.array(cols,NONE)
+	            val data: (((int * elem) list) option) Array.array = Array.array(cols,NONE)
                     val nzcount = ref 0
                     val _ = List.app 
                                 (fn (icol,lst) => 
-                                    case lst of
-                                        [(irow,v)] => if not (Number.== (v,zero))
-                                                      then (Array.update (data, icol, SOME (DynArray.fromList [(irow,v)]));
-                                                            nzcount := (!nzcount) + 1)
-                                                      else ()
-                                      | (_ :: _) => 
-                                        (Array.update (data, icol, SOME (DynArray.fromList lst));
+                                    (let 
+                                        val colv = Array.sub (data, icol)
+                                    in 
+                                        (case colv of
+                                             SOME col => Array.update (data, icol, SOME (lst @ col))
+                                           | NONE => (Array.update (data, icol, SOME lst));
                                          nzcount := (!nzcount) + (List.length lst))
-                                      | [] => ()) a
+                                    end))
+                                a
                     val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (cols, 0)
                     val update  = IntArray.update
-                    val fi      = buildSparseFromArray (data, data', indptr, indices)
+                    val fi      = buildSparseFromArrayList (data, data', indptr, indices)
                 in
                     {shape=shape,
                      blocks=[SPARSE {offset=case offset of NONE => [0, 0] | SOME i => i, 
@@ -407,24 +430,23 @@ struct
                 end
               | Index.CSR => 
                 let 
-	            val data: (((int * elem) DynArray.array) option) Array.array  = Array.array(rows,NONE)
+	            val data: (((int * elem) list) option) Array.array  = Array.array(rows,NONE)
                     val nzcount = ref 0
                     val _ = List.app 
                                 (fn (irow,lst) => 
-                                    case lst of
-                                        [(icol,v)] => if not (Number.== (v,zero))
-                                                      then (Array.update (data, irow, SOME (DynArray.fromList [(icol,v)]));
-                                                            nzcount := (!nzcount) + 1)
-                                                      else ()
-                                      | (_ :: _) => 
-                                        (Array.update (data, irow, SOME (DynArray.fromList lst));
+                                    (let 
+                                        val rowv = Array.sub (data, irow)
+                                    in 
+                                        (case rowv of
+                                             SOME row => (Array.update (data, irow, SOME (lst @ row)))
+                                           | NONE => (Array.update (data, irow, SOME lst));
                                          nzcount := (!nzcount) + (List.length lst))
-                                      | [] => ()) a
+                                    end)) a
                     val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
                     val indptr  = IntArray.array (rows, 0)
                     val update  = IntArray.update
-                    val fi      = buildSparseFromArray (data, data', indptr, indices)
+                    val fi      = buildSparseFromArrayList (data, data', indptr, indices)
                 in
                     {shape=shape, 
                      blocks=[SPARSE {offset = case offset of NONE => [0,0] | SOME i => i, 
@@ -457,8 +479,7 @@ struct
                                             (*val col' = (irow,v) :: col*)
                                             in
                                                 (case colv of
-                                                     SOME col => 
-                                                     (DynArray.update(col,DynArray.length col,(irow,v)))
+                                                     SOME col => (DynArray.update(col,DynArray.length col,(irow,v)))
                                                    | NONE => Array.update (data, icol, SOME (DynArray.fromList [(irow,v)]));
                                                  nzcount := (!nzcount) + 1)
                                             end
@@ -762,6 +783,25 @@ struct
         end
 
             
+    fun insertList (S as {shape, blocks},a,shape_a,offset) =
+        let
+            val (i,j) = dimVals offset
+            val {shape=_, blocks=bs} = fromList shape (a,shape_a,SOME [i,j])
+            val b': block = case bs of
+                                [b] => b
+                              | _ => raise Match
+        in
+            insertBlock (S,b',offset)
+        end
+
+    fun fromLists shape (al: ({l: (int * (int * elem) list) list, shape_l: index, offset: index}) list) = 
+        (case al of
+             {l,shape_l,offset}::rst => 
+             (List.foldl (fn ({l,shape_l,offset},ax) => insertList (ax,l,shape_l,offset))
+                         (fromList shape (l, shape_l, SOME offset))
+                         rst)
+           | _ => raise Match)
+
     fun insertTensor (S as {shape, blocks},t,offset) =
         let
             val (i,j) = dimVals offset

@@ -86,7 +86,7 @@ structure Loop =
                 any (a+1, b, f)
 
         fun find (a, b, f) =
-            if a >= b 
+            if a > b 
             then NONE
             else (let
                      val v1 = f a

@@ -116,6 +116,8 @@ signature MONO_SPARSE_MATRIX =
 
 	val fromList : index -> ((int * (int * elem) list) list * index * (index option)) -> matrix
 	val fromLists : index -> ({l: (int * (int * elem) list) list, shape_l: index, offset: index} list) -> matrix
+	val fromVector : index -> ((int * int * elem) vector) * index * (index option) -> matrix
+	val fromVectors : index -> ({v: ((int * int * elem) vector), shape_v: index, offset: index} list) -> matrix
 	val fromTensor : index -> (Tensor.tensor * (index option)) -> matrix
 	val fromTensorList : index -> {tensor: Tensor.tensor, offset: index, sparse: bool} list -> matrix
 	val fromGenerator : index -> ((index -> elem) * index * (index option)) -> matrix
@@ -441,6 +443,65 @@ struct
                                              SOME row => (Array.update (data, irow, SOME (lst @ row)))
                                            | NONE => (Array.update (data, irow, SOME lst));
                                          nzcount := (!nzcount) + (List.length lst))
+                                    end)) a
+                    val data'   = Tensor.Array.array (!nzcount, zero)
+                    val indices = IntArray.array (!nzcount, 0)
+                    val indptr  = IntArray.array (rows, 0)
+                    val update  = IntArray.update
+                    val fi      = buildSparseFromArrayList (data, data', indptr, indices)
+                in
+                    {shape=shape, 
+                     blocks=[SPARSE {offset = case offset of NONE => [0,0] | SOME i => i, 
+                                     shape=shape_a, nz={ indptr= indptr, indices=indices }, data=data'}]}
+                end
+        end)
+
+
+    fun fromVector shape (a, shape_a, offset) = 
+        (let 
+             val len_a = Vector.length a
+             val (rows,cols) = dimVals shape_a
+        in
+            case Index.order of
+                Index.CSC =>
+                let 
+	            val data: (((int * elem) list) option) Array.array = Array.array(cols,NONE)
+                    val nzcount = ref 0
+                    val _ = Vector.app 
+                                (fn (irow,icol,v) => 
+                                    (let 
+                                        val colv = Array.sub (data, icol)
+                                    in 
+                                        (case colv of
+                                             SOME col => Array.update (data, icol, SOME ((irow,v) :: col))
+                                           | NONE => (Array.update (data, icol, SOME [(irow,v)]));
+                                         nzcount := (!nzcount) + 1)
+                                    end))
+                                a
+                    val data'   = Tensor.Array.array (!nzcount, zero)
+                    val indices = IntArray.array (!nzcount, 0)
+                    val indptr  = IntArray.array (cols, 0)
+                    val update  = IntArray.update
+                    val fi      = buildSparseFromArrayList (data, data', indptr, indices)
+                in
+                    {shape=shape,
+                     blocks=[SPARSE {offset=case offset of NONE => [0, 0] | SOME i => i, 
+                                     shape=shape_a, nz={ indptr= indptr, indices=indices }, 
+                                     data=data'}]}
+                end
+              | Index.CSR => 
+                let 
+	            val data: (((int * elem) list) option) Array.array  = Array.array(rows,NONE)
+                    val nzcount = ref 0
+                    val _ = Vector.app 
+                                (fn (irow,icol,v) => 
+                                    (let 
+                                        val rowv = Array.sub (data, irow)
+                                    in 
+                                        (case rowv of
+                                             SOME row => (Array.update (data, irow, SOME ((icol,v) :: row)))
+                                           | NONE => (Array.update (data, irow, SOME [(icol,v)]));
+                                         nzcount := (!nzcount) + 1)
                                     end)) a
                     val data'   = Tensor.Array.array (!nzcount, zero)
                     val indices = IntArray.array (!nzcount, 0)
@@ -799,6 +860,25 @@ struct
              {l,shape_l,offset}::rst => 
              (List.foldl (fn ({l,shape_l,offset},ax) => insertList (ax,l,shape_l,offset))
                          (fromList shape (l, shape_l, SOME offset))
+                         rst)
+           | _ => raise Match)
+
+    fun insertVector (S as {shape, blocks},a,shape_a,offset) =
+        let
+            val (i,j) = dimVals offset
+            val {shape=_, blocks=bs} = fromVector shape (a,shape_a,SOME [i,j])
+            val b': block = case bs of
+                                [b] => b
+                              | _ => raise Match
+        in
+            insertBlock (S,b',offset)
+        end
+
+    fun fromVectors shape (al: ({v: (int * int * elem) vector, shape_v: index, offset: index}) list) = 
+        (case al of
+             {v,shape_v,offset}::rst => 
+             (List.foldl (fn ({v,shape_v,offset},ax) => insertVector (ax,v,shape_v,offset))
+                         (fromVector shape (v, shape_v, SOME offset))
                          rst)
            | _ => raise Match)
 

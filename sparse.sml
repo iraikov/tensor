@@ -1002,7 +1002,7 @@ struct
                      (let 
                          val (m,n) = dimVals offset
                        in
-                           Tensor.sub (data,[i+m,j+n])
+                           Tensor.sub (data,[i-m,j-n])
                        end)
                 )
               | NONE => zero
@@ -1028,7 +1028,7 @@ struct
                      (let 
                          val (m,n) = dimVals offset
                        in
-                           SOME (Tensor.sub (data,[i+m,j+n]))
+                           SOME (Tensor.sub (data,[i-m,j-n]))
                        end)
                 )
               | NONE => NONE

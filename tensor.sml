@@ -2687,8 +2687,8 @@ structure MonoTensor  =
                 val next = Index.next shape
             in
                 (Array.foldl 
-                     (fn (v,i) => (f (i,v); valOf (next i)))
-                     (Index.first shape) 
+                     (fn (v,SOME i) => (f (i,v); next i) | (_,NONE) => raise Option)
+                     (SOME (Index.first shape))
                      (toArray tensor); ())
             end
         fun app f tensor = Array.app f (toArray tensor)

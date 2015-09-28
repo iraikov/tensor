@@ -330,3 +330,20 @@ val _ = Loop.app
                                      )
             ))
 
+val S3 = SparseMatrix.fromTensorList [3,3]
+                                     [
+                                       {offset=[0,1],
+                                        tensor=(RTensor.*> 0.1 (RTensor.new ([1,1],1.0))),
+                                        sparse=false}                                     
+                                     ]
+
+val _ = Loop.app
+            (0,3,fn (j) => 
+                    Loop.app (0,3,fn (i) => 
+                                     (
+                                      print ("S3(" ^ (Int.toString i) ^ "," ^ (Int.toString j) ^ ") = "); 
+                                      TensorFile.realWrite 
+                                          (TextIO.stdOut) 
+                                          (SparseMatrix.sub (S3,[i,j]))
+                                     )
+            ))

@@ -19,13 +19,6 @@ conditions are met:
 
 
 
-fun putStr out str = 
-    TextIO.output (out, str)
-
-fun putStrLn out str = 
-    (TextIO.output (out, str);
-     TextIO.output (out, "\n"))
-
 
 
 signature SPARSE_INDEX =
@@ -1182,9 +1175,10 @@ struct
                     val (m,n) = dimVals (Tensor.shape data)
 
                     val i'  = case axis of 1 => i-v | 0 => i-u | _ => raise Match
+
                     val sl  = case axis of 
-                                  1 => TensorSlice.fromto ([0,i'],[m-1,i'],data)
-                                | 0 => TensorSlice.fromto ([i',0],[i',n-1],data)
+                                  1 => RTensorSlice.fromto' ([0,i'],[m,i'],data)
+                                | 0 => RTensorSlice.fromto' ([i',0],[i',n],data)
                                 | _ => raise Match
               in
                   SOME (SLDENSE {data=sl, offset=offset})

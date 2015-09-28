@@ -727,7 +727,7 @@ struct
 
 	fun fromto shape (lo, up) =
 	    if (Index.validShape shape) andalso (Index.validIndex lo) andalso (Index.validIndex up) andalso
-               (Index.inBounds shape lo) andalso (Index.inBounds shape up) andalso Index.< (lo,up)
+               (Index.inBounds shape lo) andalso (Index.inBounds shape up) andalso Index.<= (lo,up)
             then
                 let
                     val shape' = ListPair.map (fn (x,y) => y-x+1) (lo,up)
@@ -1049,6 +1049,8 @@ signature TENSOR_SLICE =
         type 'a slice
 
         val fromto : index * index * 'a tensor -> 'a slice
+        val fromto' : index * index * 'a tensor -> 'a slice
+
         val slice  : ((index * index) list) * 'a tensor -> 'a slice
 
         val length : 'a slice -> int
@@ -1334,6 +1336,14 @@ structure TensorSlice : TENSOR_SLICE =
 
         fun fromto (lo,up,tensor) =
             let val r = Range.fromto (Tensor.shape tensor) (lo,up)
+            in
+                {range=r,
+                 shapes=(Range.shapes r),
+                 tensor=tensor}
+            end
+
+        fun fromto' (lo,up,tensor) =
+            let val r = Range.fromto' (Tensor.shape tensor) (lo,up)
             in
                 {range=r,
                  shapes=(Range.shapes r),
@@ -3253,13 +3263,28 @@ structure RTensorSlice =
 
         type slice = {range : range, shapes: index list, tensor : tensor}
 
+        exception EmptySliceRange
+
         fun fromto (lo,up,tensor) =
             let val r = Range.fromto (Tensor.shape tensor) (lo,up)
             in
-                {range=r,
-                 shapes=(Range.shapes r),
-                 tensor=tensor}
+                if (Range.length r) = 0
+                then raise EmptySliceRange
+                else {range=r,
+                      shapes=(Range.shapes r),
+                      tensor=tensor}
             end
+
+        fun fromto' (lo,up,tensor) =
+            let val r = Range.fromto' (Tensor.shape tensor) (lo,up)
+            in
+                if (Range.length r) = 0
+                then raise EmptySliceRange
+                else {range=r,
+                      shapes=(Range.shapes r),
+                      tensor=tensor}
+            end
+
 
         fun slice (rs,tensor) =
             let 
@@ -3324,16 +3349,18 @@ structure RTensorSlice =
 
         fun foldl f init (slice: slice) = 
         let
+
            val te     = base slice
            val sh     = Tensor.shape te
            val arr    = Tensor.toArray te
            val ra     = range slice
+                                                           
         in 
             Range.foldi_range
                 (fn ((i,j),ax) => 
-                    Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
-                             fn (n,ax) => f (Array.sub (arr,n),ax), 
-                                ax))
+                    (Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                                 fn (n,ax) => f (Array.sub (arr,n),ax), 
+                                 ax)))
                 init ra
         end
 

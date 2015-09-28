@@ -25,6 +25,9 @@ fun putStrLn out str =
     (TextIO.output (out, str);
      TextIO.output (out, "\n"))
 
+fun putStr out str = 
+    (TextIO.output (out, str))
+
 
 fun realRandomTensor (xseed,yseed) shape =
     let 
@@ -56,7 +59,7 @@ val SA     = SparseMatrix.fromMapGenerator
 val _ = Loop.app
             (0,10,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice column " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,1,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -67,7 +70,7 @@ val _ = Loop.app
 val _ = Loop.app
             (0,10,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice row " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice row " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,0,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -100,7 +103,7 @@ val SA     = SparseMatrix.fromMapGenerator
 val _ = Loop.app
             (0,10,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice column " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,1,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -111,7 +114,7 @@ val _ = Loop.app
 val _ = Loop.app
             (0,10,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice row " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice row " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,0,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -137,7 +140,7 @@ val SA     = SparseMatrix.fromGenerator
 val _ = Loop.app
             (0,10,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice column " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,1,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -148,7 +151,7 @@ val _ = Loop.app
 val _ = Loop.app
             (0,10,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice row " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice row " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,0,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -193,7 +196,7 @@ val _ = Loop.app
 val _ = Loop.app
             (0,6,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice column " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,1,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -204,7 +207,7 @@ val _ = Loop.app
 val _ = Loop.app
             (0,6,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice row " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SA slice row " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SA,0,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -244,7 +247,7 @@ val _ = Loop.app
 val _ = Loop.app
             (0,10,fn (i) => 
                     let
-                        val _ = putStrLn TextIO.stdOut ("SparseMatrix slice column " ^ (Int.toString i) ^ ": ")
+                        val _ = putStrLn TextIO.stdOut ("SB slice column " ^ (Int.toString i) ^ ": ")
                         val sl = SparseMatrix.slice (SB,1,i) 
                     in
                         SparseMatrix.sliceAppi 
@@ -347,3 +350,31 @@ val _ = Loop.app
                                           (SparseMatrix.sub (S3,[i,j]))
                                      )
             ))
+
+val _ = SparseMatrix.appi 
+            (fn (i,v) => (putStr TextIO.stdOut "S3[";
+                          TensorFile.listLineWrite Int.toString TextIO.stdOut i;
+                          putStrLn TextIO.stdOut ("]: " ^ (Real.toString v))))
+            S3
+
+val _ = Loop.app
+            (0,3,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("S3 slice column " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (S3,1,i) 
+                    in
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
+                    end)
+
+val _ = Loop.app
+            (0,3,fn (i) => 
+                    let
+                        val _ = putStrLn TextIO.stdOut ("S3 slice row " ^ (Int.toString i) ^ ": ")
+                        val sl = SparseMatrix.slice (S3,0,i) 
+                    in
+                        SparseMatrix.sliceAppi 
+                            (fn (i,x) => putStrLn TextIO.stdOut ("[" ^ (Int.toString i) ^ "]: " ^ (Real.toString x)))
+                            sl
+                    end)

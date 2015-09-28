@@ -1281,7 +1281,7 @@ struct
                   (RTensorSlice.foldl
                        (fn (x,i) => 
                            let
-                               val i' = i-m
+                               val i' = i+m
                            in
                                (f (i',x); i+1)
                            end) 0 sl; ())
@@ -1307,7 +1307,7 @@ struct
                   #2 (RTensorSlice.foldl
                           (fn (x,(i,ax)) => 
                               let
-                                  val i' = i-m
+                                  val i' = i+m
                               in
                                   (i+1, f (i',x,ax))
                               end) (0,ax) sl)

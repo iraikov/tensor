@@ -366,6 +366,31 @@ val _ = Loop.app
                                      )
             ))
 
+val seed   = Random.rand (1,19)
+fun random_int (imin,imax) = Random.randRange (imin,imax) seed
+
+fun sampleN n =
+  let
+      val i = ref 0
+      val sample = Array.array (n+1, 0)
+  in
+      (sample,
+       fn (x) =>
+          (i := (!i)+1;
+           if (!i) <= n
+           then Array.update (sample, !i, x)
+           else (if random_int (0, !i) < n
+                 then Array.update(sample, random_int (0, n), x) else ())))
+  end
+
+
+val (sample,fsample) = sampleN 100
+
+val _ = Loop.app (0,100,fn (i) => Loop.app (0,100,fn (j) => fsample (100*i + j)))
+val _ = Loop.app
+            (0,100,fn (i) => 
+                      putStrLn (TextIO.stdOut,
+                                ("sample(" ^ (Int.toString i) ^ ") = " ^ (Int.toString (Array.sub(sample, i))))))
 
 
 end

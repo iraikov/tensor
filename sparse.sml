@@ -262,12 +262,13 @@ structure SparseIndex =
 
 
 
-structure SparseMatrix : MONO_SPARSE_MATRIX =
-
+structure RSparseMatrix : MONO_SPARSE_MATRIX =
 struct
-    structure Tensor : MONO_TENSOR = RTensor
-    structure TensorSlice : MONO_TENSOR_SLICE = RTensorSlice
+
+    structure Tensor = RTensor
+    structure TensorSlice = RTensorSlice
     structure Number = RTensor.Number
+
     structure Index = SparseIndex
     structure Map = IntMap
 
@@ -1320,5 +1321,4 @@ struct
     fun a / b = map2 Number./ a b
 
 end
-
 

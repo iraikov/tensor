@@ -5,7 +5,9 @@ signature RAW_ARRAY = sig
 
    structure Rep : sig
       type 'a t
+      val int8 : Int8.int t
       val int32 : Int32.int t
+      val real32 : Real32.real t
       val real64 : Real64.real t
    end
 
@@ -45,9 +47,15 @@ structure RawArray :> RAW_ARRAY = struct
                    sub : MLton.Pointer.t * int -> 'a,
                    update : MLton.Pointer.t * int * 'a -> unit}
 
+      val int8 = ARPTR {bytesPerElem = 0w1, 
+                        sub = MLton.Pointer.getInt8,
+                        update = MLton.Pointer.setInt8}
       val int32 = ARPTR {bytesPerElem = 0w4, 
                          sub = MLton.Pointer.getInt32,
                          update = MLton.Pointer.setInt32}
+      val real32 = ARPTR {bytesPerElem = 0w4, 
+                         sub = MLton.Pointer.getReal32,
+                         update = MLton.Pointer.setReal32}
       val real64 = ARPTR {bytesPerElem = 0w8, 
                          sub = MLton.Pointer.getReal64,
                          update = MLton.Pointer.setReal64}

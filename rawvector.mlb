@@ -1,0 +1,14 @@
+$(MLTON_LIB)/com/ssh/extended-basis/unstable/basis.mlb
+$(SML_LIB)/basis/mlton.mlb
+$(SML_LIB)/basis/c-types.mlb
+
+ann
+   "allowFFI true"
+   "sequenceNonUnit warn"
+   "warnUnused true"
+in
+   local
+      mmap.sml
+   in
+   end
+end

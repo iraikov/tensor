@@ -1,4 +1,4 @@
-$(MLTON_LIB)/com/ssh/extended-basis/unstable/basis.mlb
+$(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
 $(SML_LIB)/basis/c-types.mlb
 
@@ -8,7 +8,7 @@ ann
    "warnUnused true"
 in
    local
-      mmap.sml
+      raw-array.sml
    in
    end
 end

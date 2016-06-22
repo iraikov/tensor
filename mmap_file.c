@@ -4,26 +4,29 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-void *map_file(const char *file, size_t *size) {
-  int fd = open(file, O_RDONLY, S_IRUSR);
-  if (-1 == fd) goto open;
-
+void *mmap_file(const char *file, size_t *size) 
+{
+  int fd; void *ptr;
   struct stat stat;
-  if (-1 == fstat(fd, &stat)) goto stat;
 
-  void *ptr = mmap(0, stat.st_size, PROT_READ, MAP_SHARED, fd, 0);
-  if ((void*)(-1) == ptr) goto mmap;
+  if ((fd = open(file, O_RDONLY, S_IRUSR)) == -1) goto openerr;
 
-  if (-1 == close(fd)) goto fclose;
+  if (fstat(fd, &stat) == -1) goto staterr;
+
+  if ((ptr = mmap(NULL, stat.st_size, PROT_READ, MAP_SHARED, fd, 0)) == (void *)-1)
+    goto mmaperr;
+
+  if (close(fd) == -1) goto fcloseerr;
 
   *size = stat.st_size;
+
   return ptr;
 
- fclose:
+ fcloseerr:
   munmap(ptr, stat.st_size);
- mmap:
- stat:
+ mmaperr:
+ staterr:
   close(fd);
- open:
-  return 0;
+ openerr:
+  return NULL;
 }

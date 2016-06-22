@@ -1,7 +1,7 @@
 (* Primitive operations on "raw" arrays. Based on code by Vesa Karvonen. *)
 
 signature RAW_ARRAY = sig
-   type 'a t
+   type 'a array
 
    structure Rep : sig
       type 'a t
@@ -11,16 +11,16 @@ signature RAW_ARRAY = sig
       val real64 : Real64.real t
    end
 
-   val mmap      : 'a Rep.t -> string -> 'a t
-   val length    : 'a t -> int
-   val sub       : 'a t * int -> 'a
-   val update    : 'a t * int * 'a -> unit
-   val unsafeSub : 'a t * int -> 'a
-   val unsafeUpdate : 'a t * int * 'a -> unit
+   val mmap      : 'a Rep.t -> string -> 'a array
+   val length    : 'a array -> int
+   val sub       : 'a array * int -> 'a
+   val update    : 'a array * int * 'a -> unit
+   val unsafeSub : 'a array * int -> 'a
+   val unsafeUpdate : 'a array * int * 'a -> unit
 end
 
 structure RawArray :> RAW_ARRAY = struct
-   datatype 'a t =
+   datatype 'a array =
       ARPTR of {
                 ptr : MLton.Pointer.t,
                 len : int,
@@ -79,8 +79,8 @@ end
 signature RAW_ARRAY = 
 sig
    include RAW_ARRAY
-   val foldl : ('a * 'b -> 'b) -> 'b -> 'a t -> 'b
-   val app : ('a -> unit) -> 'a t -> unit
+   val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+   val app : ('a -> unit) -> 'a array -> unit
 end
 
 (* Extended implementation of raw vectors with non-primitive operations. *)

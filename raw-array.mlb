@@ -10,5 +10,6 @@ in
    local
       raw-array.sml
    in
+      structure RawArray
    end
 end

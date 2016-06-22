@@ -1912,6 +1912,7 @@ struct
 
 end (* ComplexNumber *)
 
+
 structure INumberArray =
     struct
         open Array
@@ -1939,32 +1940,6 @@ structure RNumberArray =
         fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
     end
 
-
-structure INumberArray =
-    struct
-        open Array
-        type array = INumber.t array
-        type vector = INumber.t vector
-        type elem  = INumber.t
-        structure Vector =
-            struct
-                open Vector
-                type vector = INumber.t Vector.vector
-                type elem = INumber.t
-            end
-        fun map f a = tabulate(length a, fn x => (f (sub(a,x))))
-        fun mapi f a = tabulate(length a, fn x => (f (x,sub(a,x))))
-        fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
-    end
-structure RNumberArray =
-    struct
-        open Real64Array
-        val sub = Unsafe.Real64Array.sub
-        val update = Unsafe.Real64Array.update
-        fun map f a = tabulate(length a, fn x => (f (sub(a,x))))
-        fun mapi f a = tabulate(length a, fn x => (f (x,sub(a,x))))
-        fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
-    end
 (*--------------------- COMPLEX ARRAY -------------------------*)
 structure BasicCNumberArray =
 struct
@@ -2138,6 +2113,8 @@ structure CNumberArray =
         type vector = Vector.vector
         open BasicCNumberArray
     end (* CNumberArray *)
+
+
 structure ITensor =
     struct
         structure Number = INumber

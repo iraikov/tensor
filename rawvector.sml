@@ -66,6 +66,6 @@ structure RawVector : RAW_VECTOR = struct
    in
       lp 0 s
    end
-   fun app ef = foldl (fn (x, ()) => ef x) ()
+   fun app ef = foldl (fn (x, ()) => ef x) () 
    fun for xs ef = app ef xs
 end

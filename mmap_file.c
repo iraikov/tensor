@@ -4,7 +4,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-void *map_file(const char *file, size_t *size) {
+void *map_file(const char *file, size_t *size) 
+{
   int fd = open(file, O_RDONLY, S_IRUSR);
   if (-1 == fd) goto open;
 

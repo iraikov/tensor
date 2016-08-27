@@ -7,8 +7,5 @@ ann
    "sequenceNonUnit warn"
    "warnUnused true"
 in
-   local
-      mmap.sml
-   in
-   end
+   rawvector.sml
 end

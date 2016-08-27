@@ -729,14 +729,8 @@ struct
 	fun fromto shape (lo, up) =
 	    if (Index.validShape shape) andalso (Index.validIndex lo) andalso (Index.validIndex up) andalso
                (Index.inBounds shape lo) andalso (Index.inBounds shape up) andalso Index.<= (lo,up)
-            then
-                let
-                    val shape' = ListPair.map (fn (x,y) => y-x+1) (lo,up)
-                in
-		    RangeIn(shape,lo,up)
-                end
-	    else
-		RangeEmpty
+            then RangeIn(shape,lo,up)
+	    else RangeEmpty
 
 	fun fromto' shape (lo, up) = fromto shape (lo, (Index.prev' shape up))
 
@@ -762,12 +756,7 @@ struct
             in 
                 case set of
                     []        => RangeEmpty
-                  | [(lo,up)] => 
-                    let
-                        val shape' = ListPair.map (fn (x,y) => y-x+1) (lo,up)
-                    in
-                        RangeIn (shape,lo,up)
-                    end
+                  | [(lo,up)] => RangeIn (shape,lo,up)
                   | _         => 
                     let
                         val shapes = List.map (fn (lo,up) => (ListPair.map (fn (x,y) => y-x+1) (lo,up))) set
@@ -1438,6 +1427,421 @@ structure TensorSlice : TENSOR_SLICE =
            val te   = base slice
            val ra   = range slice
            val fndx = Range.first ra
+        in 
+           Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
+        end
+
+    end                                
+
+
+signature SLIDING_RANGE =
+    sig
+	structure Index : INDEX
+	type index = Index.t
+	type t
+
+	exception Range
+
+	val fromto : index -> index -> index * index -> t
+	val fromto' : index -> index -> index * index -> t
+	val upto : index -> index -> index -> t
+	val below : index -> index -> index -> t
+
+	val first : t -> index
+	val last : t -> index
+
+	val length : t -> int
+	val stride : t -> index
+	val shape : t -> index
+	val shapes : t -> index list
+	val inRange : t -> index -> bool
+	val next : t -> index -> index option
+	val prev : t -> index -> index option
+
+        val shiftr : t -> bool
+        val reset : t -> unit
+
+	val iteri : (index -> bool) -> t -> bool
+	val foldi_range : (((index * index) * 'a) -> 'a) -> 'a -> t -> 'a
+        
+    end
+
+
+
+structure SlidingRange : SLIDING_RANGE =
+struct
+
+    structure Index = Index
+    type index = Index.t
+    datatype t = SlidingRangeEmpty | SlidingRangeIn of index * index * index * index * index ref
+
+    exception Range
+
+    local
+	fun next'' [] [] [] = raise Range
+	  | next'' [] _  _  = raise Index.Index
+	  | next'' _  [] _  = raise Index.Index
+	  | next'' _  _  [] = raise Index.Index
+	  | next'' (low::rl) (up::ru) (index::ri) =
+	    if index < up then
+		index + 1 :: ri
+	    else
+		low :: (next'' rl ru ri)
+
+	fun prev'' [] [] [] = raise Range
+	  | prev'' [] _  _  = raise Index.Index
+	  | prev'' _  [] _  = raise Index.Index
+	  | prev'' _  _  [] = raise Index.Index
+	  | prev'' (low::rl) (up::ru) (index::ri) =
+	    if index > low then
+		index - 1 :: ri
+	    else
+		up :: (prev'' rl ru ri)
+
+	(* Builds the simple loop
+	   for i := first to last
+	      if not (g (i::ndx)) then
+		  break
+	   endfor *)
+
+	fun simple_loop (first : int) (last : int) =
+	    let fun loop (ndx : index) (g: index -> bool) =
+		let fun innerloop i =
+		    if i > last then
+			true
+		    else if g (i::ndx) then
+			innerloop (i+1)
+		    else
+			false
+		in innerloop first end
+	    in loop end
+
+	(* Builds the nested loop
+	   for i := first to last
+	      if not (f (i:ndx) g) then
+		  break
+	   endfor *)
+	fun nested_loop f (first : int) (last : int) =
+	    let fun loop (ndx: index) (g: index -> bool) =
+		let fun innerloop i =
+                     (if i > last then
+			true
+		    else if (f (i::ndx) g) then
+			innerloop (i+1)
+		    else
+			false)
+		in 
+                     innerloop first 
+                end
+	    in loop end
+
+	fun build_iterator ([a] : index) ([b] : index) = 
+            simple_loop a b
+	  | build_iterator (a::ra) (b::rb) =
+	    nested_loop (build_iterator ra rb) a b
+	  | build_iterator [] _ = raise Range
+	  | build_iterator _ [] = raise Range
+
+	fun simple_range_fold (first : int) (last : int) (ndx: index) 
+                              (f: ((index * index) * 'a) -> 'a) (init: 'a) =
+            f ((first::ndx,last::ndx),init)
+
+	fun nested_range_fold (g: index -> (((index * index) * 'a) -> 'a) -> 'a -> 'a)
+                              (first : int) (last : int) =
+	    let
+                fun loop (ndx: index) (f: ((index * index) * 'a) -> 'a) (init: 'a) =
+		    let
+                        fun innerloop i init =
+                            (if i > last then
+			         init
+		             else 
+			         innerloop (i+1) (g (i::ndx) f init))
+		    in 
+                        innerloop first init
+                    end
+	    in loop end
+            
+	fun build_range_fold ([a] : index) ([b] : index) = 
+            simple_range_fold a b
+	  | build_range_fold (a::ra) (b::rb) =
+	    nested_range_fold (build_range_fold ra rb) a b
+	  | build_range_fold [] _ = raise Range
+	  | build_range_fold _ [] = raise Range
+
+    in
+
+	(* ----- CONSTRUCTORS ----- *)
+
+	fun fromto shape stride (lo, up) =
+	    if (Index.validShape shape) andalso 
+               (Index.validShape stride) andalso 
+               (Index.validIndex lo) andalso 
+               (Index.validIndex up) andalso
+               (Index.inBounds shape lo) andalso 
+               (Index.inBounds shape up) andalso 
+               Index.<= (lo,up)
+            then
+                let
+                    val offset = ref (List.map (fn (i) => 0) shape)
+                in
+		    SlidingRangeIn(shape,stride,lo,up,offset)
+                end
+	    else
+		SlidingRangeEmpty
+
+	fun fromto' shape stride (lo, up) = fromto shape stride (lo, (Index.prev' shape up))
+
+	fun upto shape stride index = fromto shape stride (Index.first index, index)		
+	fun below shape stride index = fromto' shape stride (Index.first index, index)
+
+	fun length SlidingRangeEmpty = 0
+	  | length (SlidingRangeIn(shape,stride,lo,up,offset)) =
+	    let fun diff (x,y) = (y-x+1) in
+		Index.length (ListPair.map diff (lo,up))
+	    end
+ 
+	fun shapes SlidingRangeEmpty = []
+	  | shapes (SlidingRangeIn(shape,stride,lo,up,offset)) =
+	    let fun diff (x,y) = (y-x+1) 
+            in
+		[ListPair.map diff (lo,up)]
+	    end
+
+        fun shape SlidingRangeEmpty =  raise Empty
+          | shape r =
+            let val shs = shapes r
+            in
+                case shs of 
+                    [sh] => sh
+                  | _ => foldl Index.+ (hd shs) (tl shs)
+            end
+
+	fun stride SlidingRangeEmpty = raise Range
+	  | stride (SlidingRangeIn(shape,stride,lo,up,offset)) = stride
+
+	fun first SlidingRangeEmpty = raise Range
+	  | first (SlidingRangeIn(shape,stride,lo,up,offset)) = Index.+(!offset,lo)
+
+	fun last SlidingRangeEmpty = raise Range
+	  | last (SlidingRangeIn(shape,stride,lo,up,offset)) = Index.+(!offset,up)
+
+	(* ----- PREDICATES & OPERATIONS ----- *)
+
+	fun inRange SlidingRangeEmpty _ = false
+	  | inRange (SlidingRangeIn(shape,stride,lo,up,offset)) ndx =
+            let val ndx' = Index.-(ndx, !offset)
+            in
+	        (ListPair.all (op <=) (lo,ndx')) andalso (ListPair.all (op <=) (ndx',up))
+            end
+
+	fun next SlidingRangeEmpty = 
+            (fn _ => NONE)
+	  | next (SlidingRangeIn(shape,stride,lo,up,offset)) = 
+            let val lo' = Index.+(!offset, lo)
+                val up' = Index.+(!offset, up)
+            in
+                fn index => (SOME (next'' lo' up' index) handle Range => NONE)
+            end
+
+	fun next' SlidingRangeEmpty =
+            (fn _ => raise Range)
+	  | next' (SlidingRangeIn(shape,stride,lo,up,offset)) =
+            let val lo' = Index.+(!offset, lo)
+                val up' = Index.+(!offset, up)
+            in
+                fn index => next'' lo' up' index
+            end
+
+	fun prev SlidingRangeEmpty = 
+            (fn _ => NONE)
+	  | prev (SlidingRangeIn(shape,stride,lo,up,offset)) = 
+            let val lo' = Index.+(!offset, lo)
+                val up' = Index.+(!offset, up)
+            in
+                fn index => (SOME (prev'' lo' up' index) handle Range => NONE)
+            end
+
+	fun prev' SlidingRangeEmpty = 
+            (fn _ => raise Range)
+	  | prev' (SlidingRangeIn(shape,stride,lo,up,offset)) = 
+            let val lo' = Index.+(!offset, lo)
+                val up' = Index.+(!offset, up)
+            in
+                fn index => prev'' lo' up' index
+            end
+
+        fun shiftr SlidingRangeEmpty = raise Range
+          | shiftr (SlidingRangeIn(shape,stride,lo,up,offset)) = 
+            let val offset' = Index.+ (!offset, stride)
+                val lo' = Index.+ (offset', lo)
+                val up' = Index.+ (offset', up)
+            in
+                if (Index.inBounds shape lo') andalso 
+                   (Index.inBounds shape up') 
+                then (offset := offset'; true)
+                else false
+            end
+
+        fun reset SlidingRangeEmpty  = raise Range
+          | reset (SlidingRangeIn(shape,stride,lo,up,offset)) = 
+            let val offset' = List.map (fn (i) => 0) shape
+            in
+                offset := offset'
+            end
+            
+
+
+	(* ----- ITERATION ----- *)
+
+	(* Builds an interator that applies 'f' sequentially to
+	   all the indices in the range, *)
+	fun iteri f SlidingRangeEmpty = f []
+	  | iteri (f: index -> bool) 
+                  (SlidingRangeIn(shape,stride,lo: index,up: index,offset)) = 
+            let val lo' = Index.+(lo, !offset)
+                val up' = Index.+(up, !offset)
+            in
+                case Index.order of
+                    Index.RowMajor => ((build_iterator lo' up') [] f)
+                  | Index.ColumnMajor => ((build_iterator (List.rev lo') (List.rev up')) [] f)
+            end
+
+	(* Builds an iterator that applies 'f' sequentially to
+	   all the ranges of contiguous indices (i,j) *)
+	fun foldi_range f init SlidingRangeEmpty = init
+	  | foldi_range (f: ((index * index) * 'a -> 'a)) init (SlidingRangeIn(shape,stride,lo: index,up: index,offset)) = 
+            let val lo' = Index.+(lo, !offset)
+                val up' = Index.+(up, !offset)
+            in
+                case Index.order of
+                    Index.RowMajor => ((build_range_fold lo' up') [] f init)
+                  | Index.ColumnMajor => ((build_range_fold (List.rev lo') (List.rev up')) [] f init)
+            end
+
+    end
+end
+
+signature TENSOR_SLIDING_WINDOW =
+    sig
+        structure Tensor : TENSOR
+        structure Range : SLIDING_RANGE
+
+        type index = Tensor.Index.t
+        type range = Range.t
+        type 'a tensor = 'a Tensor.tensor
+        type 'a window
+
+        val fromto : index * index * index * 'a tensor -> 'a window
+        val fromto' : index * index * index * 'a tensor -> 'a window
+
+        val length : 'a window -> int
+        val base   : 'a window -> 'a tensor
+        val shapes : 'a window -> index list
+        val range  : 'a window -> range
+
+        val shiftr : 'a window -> bool
+        val reset : 'a window -> unit
+
+        val sub : 'a window -> int -> 'a
+        val update : 'a window -> int -> 'a -> unit
+
+        val app : ('a -> unit) -> 'a window -> unit
+        val map : ('a -> 'b) -> 'a window -> 'b tensor
+        val foldl  : ('a * 'b -> 'b) -> 'b -> 'a window -> 'b
+        val modifyi  : (index * 'a -> 'a) -> 'a window -> unit
+
+    end
+
+
+structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
+    struct
+        structure Tensor = Tensor
+        structure Index  = Tensor.Index
+        structure Range  = SlidingRange
+            
+        type index = Tensor.Index.t
+        type range = SlidingRange.t
+        type 'a tensor = 'a Tensor.tensor
+
+        type 'a window = {range : range, tensor : 'a tensor}
+
+        fun length ({range, tensor}) = Range.length range
+        fun base ({range, tensor})   = tensor
+        fun stride ({range, tensor}) = Range.stride range
+        fun shapes ({range, tensor}) = Range.shapes range
+        fun range ({range, tensor})  = range
+
+        fun fromto (lo,up,stride,tensor) =
+            let val r = Range.fromto (Tensor.shape tensor) stride (lo,up)
+            in
+                {range=r, tensor=tensor}
+            end
+
+        fun fromto' (lo,up,stride,tensor) =
+            let val r = Range.fromto' (Tensor.shape tensor) stride (lo,up)
+            in
+                {range=r, tensor=tensor}
+            end
+
+        fun shiftr win = Range.shiftr (range win)
+        fun reset win = Range.reset (range win)
+
+        fun sub win =
+            let val te = base win
+                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
+                val a = Tensor.toArray te
+            in
+                fn (i: int) => Tensor.Array.sub (a, i+baseOffset)
+            end
+
+        fun update win =
+            let val te = base win
+                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
+                val a = Tensor.toArray te
+            in
+                fn i => (fn (v) => Tensor.Array.update (a, i+baseOffset, v))
+            end
+
+        fun map f win = 
+        let
+           val te    = base win
+           val ra    = range win
+           val len   = length win
+           val fndx  = Range.first ra
+           val arr   = Array.array (length win, f (Tensor.sub (te,fndx)))
+           val i     = ref 0
+        in 
+           Range.iteri (fn (ndx) => let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
+           Tensor.fromArray ([1,len], arr)
+        end
+
+        fun app f (win: 'a window) = 
+        let
+           val te   = base win
+           val ra   = range win
+        in 
+           Range.iteri (fn (ndx) => (f (Tensor.sub (te,ndx)); true)) ra; ()
+        end
+
+        fun foldl f init (win: 'a window) = 
+        let
+           val te     = base win
+           val sh     = Tensor.shape te
+           val arr    = Tensor.toArray te
+           val ra     = range win
+        in 
+            Range.foldi_range
+                (fn ((i,j),ax) => 
+                    Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                             fn (n,ax) => f (Array.sub (arr,n),ax), 
+                                ax))
+                init ra
+        end
+
+        fun modifyi f (win: 'a window) = 
+        let
+           val te   = base win
+           val ra   = range win
         in 
            Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
         end
@@ -3300,8 +3704,8 @@ structure RTensorSlice =
         let
            val te    = base slice
            val ra    = range slice
-           val fndx  = Range.first ra
            val len   = length (slice)
+           val fndx  = Range.first ra
            val arr   = Array.array(len, f (Tensor.sub(te,fndx)))
            val i     = ref 0
         in 
@@ -3315,7 +3719,6 @@ structure RTensorSlice =
         let
            val te    = base slice
            val ra    = range slice
-           val fndx  = Range.first ra
         in 
            Range.iteri (fn (ndx) => (f (Tensor.sub (te,ndx)); true)) ra; ()
         end
@@ -3364,7 +3767,6 @@ structure RTensorSlice =
         let
            val te   = base slice
            val ra   = range slice
-           val fndx = Range.first ra
         in 
            Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (Tensor.sub (te,ndx))); true)) ra; ()
         end

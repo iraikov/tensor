@@ -505,6 +505,7 @@ signature RANGE =
 	val last : t -> index
 
 	val length : t -> int
+	val shape : t -> index
 	val shapes : t -> index list
 	val inRange : t -> index -> bool
 	val next : t -> index -> index option
@@ -799,7 +800,15 @@ struct
 	    let fun diff (x,y) = (y-x+1) in
 		List.map (fn (lo,up) => ListPair.map diff (lo,up)) set
 	    end
- 
+
+        fun shape RangeEmpty =  raise Empty
+          | shape r =
+            let val shs = shapes r
+            in
+                case shs of 
+                    [sh] => sh
+                  | _ => foldl Index.+ (hd shs) (tl shs)
+            end
 
 	fun first RangeEmpty = raise Range
 	  | first (RangeIn(shape,lo,up)) = lo
@@ -1062,6 +1071,7 @@ signature TENSOR_SLICE =
         val map : ('a -> 'b) -> 'a slice -> 'b tensor
         val map2 : ('a * 'b -> 'c) -> 'a slice -> 'b slice -> 'c tensor
         val foldl  : ('a * 'b -> 'b) -> 'b -> 'a slice -> 'b
+        val modifyi  : (index * 'a -> 'a) -> 'a slice -> unit
 
     end
 
@@ -1334,6 +1344,11 @@ structure TensorSlice : TENSOR_SLICE =
 
         type 'a slice = {range : range, shapes: index list, tensor : 'a tensor}
 
+        fun length ({range, shapes, tensor}) = Range.length range
+        fun base ({range, shapes, tensor})   = tensor
+        fun shapes ({range, shapes, tensor}) = shapes
+        fun range ({range, shapes, tensor})  = range
+
         fun fromto (lo,up,tensor) =
             let val r = Range.fromto (Tensor.shape tensor) (lo,up)
             in
@@ -1357,11 +1372,6 @@ structure TensorSlice : TENSOR_SLICE =
                  shapes=(Range.shapes r),
                  tensor=tensor}
             end
-
-        fun length ({range, shapes, tensor}) = Range.length range
-        fun base ({range, shapes, tensor})   = tensor
-        fun shapes ({range, shapes, tensor}) = shapes
-        fun range ({range, shapes, tensor})  = range
 
         fun map f slice = 
         let
@@ -1421,6 +1431,15 @@ structure TensorSlice : TENSOR_SLICE =
                              fn (n,ax) => f (Array.sub (arr,n),ax), 
                                 ax))
                 init ra
+        end
+
+        fun modifyi f (slice: 'a slice) = 
+        let
+           val te   = base slice
+           val ra   = range slice
+           val fndx = Range.first ra
+        in 
+           Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
         end
 
     end                                
@@ -1549,6 +1568,7 @@ signature MONO_TENSOR_SLICE =
         val map : (elem -> elem) -> slice -> tensor
         val map2 : (elem * elem -> elem) -> slice -> slice -> tensor
         val foldl  : (elem * 'a -> 'a) -> 'a -> slice -> 'a
+        val modifyi  : (index * elem -> elem) -> slice -> unit
 
     end
 
@@ -1912,6 +1932,7 @@ struct
 
 end (* ComplexNumber *)
 
+
 structure INumberArray =
     struct
         open Array
@@ -1939,32 +1960,6 @@ structure RNumberArray =
         fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
     end
 
-
-structure INumberArray =
-    struct
-        open Array
-        type array = INumber.t array
-        type vector = INumber.t vector
-        type elem  = INumber.t
-        structure Vector =
-            struct
-                open Vector
-                type vector = INumber.t Vector.vector
-                type elem = INumber.t
-            end
-        fun map f a = tabulate(length a, fn x => (f (sub(a,x))))
-        fun mapi f a = tabulate(length a, fn x => (f (x,sub(a,x))))
-        fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
-    end
-structure RNumberArray =
-    struct
-        open Real64Array
-        val sub = Unsafe.Real64Array.sub
-        val update = Unsafe.Real64Array.update
-        fun map f a = tabulate(length a, fn x => (f (sub(a,x))))
-        fun mapi f a = tabulate(length a, fn x => (f (x,sub(a,x))))
-        fun map2 f a b = tabulate(length a, fn x => (f(sub(a,x),sub(b,x))))
-    end
 (*--------------------- COMPLEX ARRAY -------------------------*)
 structure BasicCNumberArray =
 struct
@@ -2138,6 +2133,8 @@ structure CNumberArray =
         type vector = Vector.vector
         open BasicCNumberArray
     end (* CNumberArray *)
+
+
 structure ITensor =
     struct
         structure Number = INumber
@@ -3287,8 +3284,7 @@ structure RTensorSlice =
 
 
         fun slice (rs,tensor) =
-            let 
-                val r = (Range.ranges (Tensor.shape tensor) rs)
+            let val r = (Range.ranges (Tensor.shape tensor) rs)
             in
                 {range=r,
                  shapes=(Range.shapes r),
@@ -3362,6 +3358,15 @@ structure RTensorSlice =
                                  fn (n,ax) => f (Array.sub (arr,n),ax), 
                                  ax)))
                 init ra
+        end
+
+        fun modifyi f (slice: slice) = 
+        let
+           val te   = base slice
+           val ra   = range slice
+           val fndx = Range.first ra
+        in 
+           Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (Tensor.sub (te,ndx))); true)) ra; ()
         end
 
 

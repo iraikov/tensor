@@ -102,7 +102,7 @@ structure Loop =
             if a < b then
                 (f a; app (a+1, b, f))
             else
-                ()
+               ()
 
         fun app2 (a1, b1, a2, b2, f) =
             if ((a1 < b1) andalso (a2 < b2)) then
@@ -1424,12 +1424,10 @@ signature TENSOR_SLIDING_WINDOW =
         val base   : 'a window -> 'a tensor
         val shapes : 'a window -> index list
         val range  : 'a window -> range
+        val baseOffset   : 'a window -> ('a tensor * int)
 
         val shiftr : 'a window -> bool
         val reset : 'a window -> unit
-
-        val sub : 'a window -> int -> 'a
-        val update : 'a window -> int -> 'a -> unit
 
         val app : ('a -> unit) -> 'a window -> unit
         val map : ('a -> 'b) -> 'a window -> 'b tensor
@@ -1830,6 +1828,14 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         fun shapes ({range, tensor}) = Range.shapes range
         fun range ({range, tensor})  = range
 
+        (* FIXME: assumes contiguous window range unlike a regular Range/Slice. *)
+        fun baseOffset win =
+            let val te = base win
+                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
+            in
+                (te, baseOffset)
+            end
+
         fun fromto (lo,up,stride,tensor) =
             let val r = Range.fromto (Tensor.shape tensor) stride (lo,up)
             in
@@ -1854,24 +1860,6 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
 
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
-
-        (* FIXME: assumes contiguous window range unlike a regular Range/Slice. *)
-        fun sub win =
-            let val te = base win
-                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
-                val a = Tensor.toArray te
-            in
-                fn (i: int) => Tensor.Array.sub (a, i+baseOffset)
-            end
-
-        (* FIXME: assumes contiguous window range unlike a regular Range/Slice. *)
-        fun update win =
-            let val te = base win
-                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
-                val a = Tensor.toArray te
-            in
-                fn i => (fn (v) => Tensor.Array.update (a, i+baseOffset, v))
-            end
 
         fun map f win = 
         let
@@ -2096,12 +2084,10 @@ signature MONO_TENSOR_SLIDING_WINDOW =
         val base   : window -> tensor
         val shapes : window -> index list
         val range  : window -> range
+        val baseOffset   : window -> (tensor * int)
 
         val shiftr : window -> bool
         val reset : window -> unit
-
-        val sub : window -> int -> elem
-        val update : window -> int -> elem -> unit
 
         val app : (elem -> unit) -> window -> unit
         val map : (elem -> elem) -> window -> tensor
@@ -3930,6 +3916,13 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
         fun shapes ({range, tensor}) = Range.shapes range
         fun range ({range, tensor})  = range
 
+        fun baseOffset win =
+            let val te = base win
+                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
+            in
+                (te, baseOffset)
+            end
+
         fun full tensor =
             let val shape  = Tensor.shape tensor
                 val stride = List.tabulate (Tensor.rank tensor, fn(i) => 0)
@@ -3954,22 +3947,6 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
 
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
-
-        fun sub win =
-            let val te = base win
-                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
-                val a = Tensor.toArray te
-            in
-                fn (i: int) => Tensor.Array.sub (a, i+baseOffset)
-            end
-
-        fun update win =
-            let val te = base win
-                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
-                val a = Tensor.toArray te
-            in
-                fn i => (fn (v) => Tensor.Array.update (a, i+baseOffset, v))
-            end
 
         fun map f win = 
         let

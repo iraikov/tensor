@@ -1429,6 +1429,8 @@ signature TENSOR_SLIDING_WINDOW =
         val shiftr : 'a window -> bool
         val reset : 'a window -> unit
 
+        val blit : 'a window -> 'a array -> unit
+
         val app : ('a -> unit) -> 'a window -> unit
         val map : ('a -> 'b) -> 'a window -> 'b tensor
         val foldl  : ('a * 'b -> 'b) -> 'b -> 'a window -> 'b
@@ -1861,6 +1863,19 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
 
+        fun blit win =
+            let
+                val te    = base win
+                val tb    = Tensor.toArray te
+                val ra    = range win
+                val fndx  = Range.first ra
+                val len   = length win
+                val boff  = Index.toInt (Tensor.shape te) fndx
+                val sl    = ArraySlice.slice (tb, boff, SOME len)
+            in
+                fn (arr) => ArraySlice.copy {src=sl, dst=arr, di=0}
+            end
+
         fun map f win = 
         let
            val te    = base win
@@ -2088,6 +2103,8 @@ signature MONO_TENSOR_SLIDING_WINDOW =
 
         val shiftr : window -> bool
         val reset : window -> unit
+
+        val blit : window -> Tensor.Array.array -> unit
 
         val app : (elem -> unit) -> window -> unit
         val map : (elem -> elem) -> window -> tensor
@@ -3947,6 +3964,19 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
 
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
+
+        fun blit win =
+            let
+                val te    = base win
+                val tb    = Tensor.toArray te
+                val ra    = range win
+                val fndx  = Range.first ra
+                val len   = length win
+                val boff  = Index.toInt (Tensor.shape te) fndx
+                val sl    = Tensor.ArraySlice.slice (tb, boff, SOME len)
+            in
+                fn (arr) => Tensor.ArraySlice.copy {src=sl, dst=arr, di=0}
+            end
 
         fun map f win = 
         let

@@ -1424,12 +1424,12 @@ signature TENSOR_SLIDING_WINDOW =
         val base   : 'a window -> 'a tensor
         val shapes : 'a window -> index list
         val range  : 'a window -> range
-        val baseOffset   : 'a window -> ('a tensor * int)
 
         val shiftr : 'a window -> bool
         val reset : 'a window -> unit
 
         val blit : 'a window -> 'a array -> unit
+        val copy : 'a array -> 'a window -> unit
 
         val app : ('a -> unit) -> 'a window -> unit
         val map : ('a -> 'b) -> 'a window -> 'b tensor
@@ -1830,14 +1830,6 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         fun shapes ({range, tensor}) = Range.shapes range
         fun range ({range, tensor})  = range
 
-        (* FIXME: assumes contiguous window range unlike a regular Range/Slice. *)
-        fun baseOffset win =
-            let val te = base win
-                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
-            in
-                (te, baseOffset)
-            end
-
         fun fromto (lo,up,stride,tensor) =
             let val r = Range.fromto (Tensor.shape tensor) stride (lo,up)
             in
@@ -1874,6 +1866,20 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
                 val sl    = ArraySlice.slice (tb, boff, SOME len)
             in
                 fn (arr) => ArraySlice.copy {src=sl, dst=arr, di=0}
+            end
+
+        fun copy arr win =
+            let
+                val te    = base win
+                val tb    = Tensor.toArray te
+                val ra    = range win
+                val fndx  = Range.first ra
+                val len   = length win
+                val boff  = Index.toInt (Tensor.shape te) fndx
+            in
+                if len = Array.length arr
+                then Array.copy {src=arr, dst=arr, di=boff}
+                else raise Index.Shape
             end
 
         fun map f win = 
@@ -2099,12 +2105,12 @@ signature MONO_TENSOR_SLIDING_WINDOW =
         val base   : window -> tensor
         val shapes : window -> index list
         val range  : window -> range
-        val baseOffset   : window -> (tensor * int)
 
         val shiftr : window -> bool
         val reset : window -> unit
 
         val blit : window -> Tensor.Array.array -> unit
+        val copy : Tensor.Array.array -> window -> unit
 
         val app : (elem -> unit) -> window -> unit
         val map : (elem -> elem) -> window -> tensor
@@ -3933,13 +3939,6 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
         fun shapes ({range, tensor}) = Range.shapes range
         fun range ({range, tensor})  = range
 
-        fun baseOffset win =
-            let val te = base win
-                val baseOffset = Index.toInt (Tensor.shape te) (Range.first (range win))
-            in
-                (te, baseOffset)
-            end
-
         fun full tensor =
             let val shape  = Tensor.shape tensor
                 val stride = List.tabulate (Tensor.rank tensor, fn(i) => 0)
@@ -3976,6 +3975,20 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
                 val sl    = Tensor.ArraySlice.slice (tb, boff, SOME len)
             in
                 fn (arr) => Tensor.ArraySlice.copy {src=sl, dst=arr, di=0}
+            end
+
+        fun copy arr win =
+            let
+                val te    = base win
+                val tb    = Tensor.toArray te
+                val ra    = range win
+                val fndx  = Range.first ra
+                val len   = length win
+                val boff  = Index.toInt (Tensor.shape te) fndx
+            in
+                if len = Tensor.Array.length arr
+                then Tensor.Array.copy {src=arr, dst=arr, di=boff}
+                else raise Index.Shape
             end
 
         fun map f win = 

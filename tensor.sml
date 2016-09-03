@@ -1116,7 +1116,7 @@ struct
 
 	fun fromto shape stride (lo, up) =
 	    if (Index.validShape shape) andalso 
-               (Index.validShape stride) andalso 
+               ((length stride)=(length shape)) andalso 
                (Index.validIndex lo) andalso 
                (Index.validIndex up) andalso
                (Index.inBounds shape lo) andalso 
@@ -1138,8 +1138,13 @@ struct
 
 	fun length SlidingRangeEmpty = 0
 	  | length (SlidingRangeIn(shape,stride,lo,up,offset)) =
-	    let fun diff (x,y) = (y-x+1) in
-		Index.length (ListPair.map diff (lo,up))
+	    let fun sumprod (a,b,c) =
+		    if b < 0 then raise Index.Shape else (a * b) + c
+	    in case Index.order of 
+                   Index.RowMajor => 
+                   ListPair.foldl sumprod 0 (1::(List.drop (shape,1)),stride)
+                 | Index.ColumnMajor => 
+                   ListPair.foldl sumprod 0 (1::(List.drop (List.rev shape,1)),stride)
 	    end
  
 	fun shapes SlidingRangeEmpty = []
@@ -1212,13 +1217,21 @@ struct
                 fn index => prev'' lo' up' index
             end
 
+        fun putStrLn (file, str) = 
+            (TextIO.output (file, str);
+             TextIO.output (file, "\n"))
+                
+        fun putStr (file, str) = 
+            (TextIO.output (file, str))
+
+
         fun shiftr SlidingRangeEmpty = raise Range
           | shiftr (SlidingRangeIn(shape,stride,lo,up,offset)) = 
             let val offset' = Index.+ (!offset, stride)
                 val lo' = Index.+ (offset', lo)
-                val up' = Index.+ (offset', up)
+                val up' = Index.prev' shape (Index.+(lo', stride))
             in
-                if (Index.inBounds shape lo') andalso 
+                if (Index.inBounds shape lo') andalso
                    (Index.inBounds shape up') 
                 then (offset := offset'; true)
                 else false
@@ -1236,12 +1249,12 @@ struct
 	(* ----- ITERATION ----- *)
 
 	(* Builds an interator that applies 'f' sequentially to
-	   all the indices in the range, *)
+	   all the indices in the current stride, *)
 	fun iteri f SlidingRangeEmpty = f []
 	  | iteri (f: index -> bool) 
                   (SlidingRangeIn(shape,stride,lo: index,up: index,offset)) = 
             let val lo' = Index.+(lo, !offset)
-                val up' = Index.+(up, !offset)
+                val up' = Index.prev' shape (Index.+(lo', stride))
             in
                 case Index.order of
                     Index.RowMajor => ((build_iterator lo' up') [] f)
@@ -1249,14 +1262,14 @@ struct
             end
 
 	(* Builds an interator that applies 'f' sequentially to
-	   all the indices of the two ranges, *)
+	   all the indices in the current strides of the two ranges, *)
 	fun iteri2 f (SlidingRangeEmpty,SlidingRangeEmpty) = f ([],[])
 	  | iteri2 (f: index * index -> bool) (SlidingRangeIn(shape1,stride1,lo1: index,up1: index,offset1),
                                                SlidingRangeIn(shape2,stride2,lo2: index,up2: index,offset2)) = 
             let val lo1' = Index.+(lo1, !offset1)
-                val up1' = Index.+(up1, !offset1)
+                val up1' = Index.prev' shape1 (Index.+(lo1', stride1))
                 val lo2' = Index.+(lo2, !offset2)
-                val up2' = Index.+(up2, !offset2)
+                val up2' = Index.prev' shape2 (Index.+(lo2', stride2))
             in
                 case Index.order of
                     Index.RowMajor => ((build_iterator2 lo1' up1' lo2' up2') [] [] f )
@@ -1265,11 +1278,11 @@ struct
 	  | iteri2 f (_,_) = raise Range
 
 	(* Builds an iterator that applies 'f' sequentially to
-	   all the ranges of contiguous indices (i,j) *)
+	   all the ranges of contiguous indices (i,j) in the current stride*)
 	fun foldi_range f init SlidingRangeEmpty = init
 	  | foldi_range (f: ((index * index) * 'a -> 'a)) init (SlidingRangeIn(shape,stride,lo: index,up: index,offset)) = 
             let val lo' = Index.+(lo, !offset)
-                val up' = Index.+(up, !offset)
+                val up' = Index.prev' shape (Index.+(lo', stride))
             in
                 case Index.order of
                     Index.RowMajor => ((build_range_fold lo' up') [] f init)
@@ -1845,9 +1858,7 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         fun full tensor =
             let val shape  = Tensor.shape tensor
                 val stride = List.tabulate (Tensor.rank tensor, fn(i) => 0)
-                val lo     = stride
-                val up     = shape
-                val r = Range.fromto' shape stride (lo,up)
+                val r = Range.fromto shape stride (Index.first shape,Index.last shape)
             in
                 {range=r, tensor=tensor}
             end
@@ -1925,6 +1936,8 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         in 
            Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
         end
+
+
 
         fun binop f (w1: 'a window) (w2: 'a window) (output: 'a window) = 
         let
@@ -2116,6 +2129,7 @@ signature MONO_TENSOR_SLIDING_WINDOW =
         val map : (elem -> elem) -> window -> tensor
         val foldl  : (elem * 'a -> 'a) -> 'a -> window -> 'a
         val modifyi  : (index * elem -> elem) -> window -> unit
+
 
     end
 
@@ -3942,9 +3956,7 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
         fun full tensor =
             let val shape  = Tensor.shape tensor
                 val stride = List.tabulate (Tensor.rank tensor, fn(i) => 0)
-                val lo     = stride
-                val up     = shape
-                val r = Range.fromto' shape stride (lo,up)
+                val r = Range.fromto shape stride (Index.first shape,Index.last shape)
             in
                 {range=r, tensor=tensor}
             end
@@ -4034,6 +4046,7 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
         in 
            Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
         end
+
 
         fun binop f (w1: window) (w2: window) (output: window) = 
         let

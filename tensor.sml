@@ -1888,7 +1888,7 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
                 val boff  = Index.toInt (Tensor.shape te) fndx
             in
                 if len = Array.length arr
-                then Array.copy {src=arr, dst=arr, di=boff}
+                then Array.copy {src=arr, dst=tb, di=boff}
                 else raise Index.Shape
             end
 
@@ -4018,7 +4018,7 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
                 val boff  = Index.toInt (Tensor.shape te) fndx
             in
                 if len = Tensor.Array.length arr
-                then Tensor.Array.copy {src=arr, dst=arr, di=boff}
+                then Tensor.Array.copy {src=arr, dst=tb, di=boff}
                 else raise Index.Shape
             end
 

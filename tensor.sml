@@ -1217,14 +1217,6 @@ struct
                 fn index => prev'' lo' up' index
             end
 
-        fun putStrLn (file, str) = 
-            (TextIO.output (file, str);
-             TextIO.output (file, "\n"))
-                
-        fun putStr (file, str) = 
-            (TextIO.output (file, str))
-
-
         fun shiftr SlidingRangeEmpty = raise Range
           | shiftr (SlidingRangeIn(shape,stride,lo,up,offset)) = 
             let val offset' = Index.+ (!offset, stride)
@@ -1441,7 +1433,6 @@ signature TENSOR_SLIDING_WINDOW =
         val shiftr : 'a window -> bool
         val reset : 'a window -> unit
 
-        val blit : 'a window -> 'a array -> unit
         val copy : 'a array -> 'a window -> unit
 
         val app : ('a -> unit) -> 'a window -> unit
@@ -1866,18 +1857,23 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
 
-        fun blit win =
-            let
-                val te    = base win
-                val tb    = Tensor.toArray te
-                val ra    = range win
-                val fndx  = Range.first ra
-                val len   = length win
-                val boff  = Index.toInt (Tensor.shape te) fndx
-                val sl    = ArraySlice.slice (tb, boff, SOME len)
-            in
-                fn (arr) => ArraySlice.copy {src=sl, dst=arr, di=0}
-            end
+        fun getindex (w: 'a window) i =
+        let
+           val te  = base w
+           val ra  = range w
+           val fst = Index.toInt (Range.first ra)
+        in 
+            Tensor.sub (te, fst+i)
+        end
+
+        fun setindex (w: 'a window) i v =
+        let
+           val te  = base w
+           val ra  = range w
+           val fst = Index.toInt (Range.first ra)
+        in 
+            Tensor.update (te, fst+i, v)
+        end
 
         fun copy arr win =
             let
@@ -2122,7 +2118,6 @@ signature MONO_TENSOR_SLIDING_WINDOW =
         val shiftr : window -> bool
         val reset : window -> unit
 
-        val blit : window -> Tensor.Array.array -> unit
         val copy : Tensor.Array.array -> window -> unit
 
         val app : (elem -> unit) -> window -> unit
@@ -3925,7 +3920,7 @@ structure RTensorSlice =
            val te   = base slice
            val ra   = range slice
         in 
-           Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (Tensor.sub (te,ndx))); true)) ra; ()
+           Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
         end
 
 
@@ -3975,19 +3970,6 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
 
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
-
-        fun blit win =
-            let
-                val te    = base win
-                val tb    = Tensor.toArray te
-                val ra    = range win
-                val fndx  = Range.first ra
-                val len   = length win
-                val boff  = Index.toInt (Tensor.shape te) fndx
-                val sl    = Tensor.ArraySlice.slice (tb, boff, SOME len)
-            in
-                fn (arr) => Tensor.ArraySlice.copy {src=sl, dst=arr, di=0}
-            end
 
         fun copy arr win =
             let

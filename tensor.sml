@@ -1235,8 +1235,6 @@ struct
             in
                 offset := offset'
             end
-            
-
 
 	(* ----- ITERATION ----- *)
 
@@ -1433,8 +1431,12 @@ signature TENSOR_SLIDING_WINDOW =
         val shiftr : 'a window -> bool
         val reset : 'a window -> unit
 
+        val sub : 'a window -> index -> 'a
+        val update : 'a window -> index -> 'a -> unit
+
         val copy : 'a array -> 'a window -> unit
 
+        val find : ('a -> bool) -> 'a window -> 'a option
         val app : ('a -> unit) -> 'a window -> unit
         val map : ('a -> 'b) -> 'a window -> 'b tensor
         val foldl  : ('a * 'b -> 'b) -> 'b -> 'a window -> 'b
@@ -1857,22 +1859,23 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
 
-        fun getindex (w: 'a window) i =
+        fun sub (w: 'a window) i =
         let
-           val te  = base w
-           val ra  = range w
-           val fst = Index.toInt (Range.first ra)
+           val te   = base w
+           val tb   = Tensor.toArray
+           val ra   = range w
+           val fndx = Range.first ra
         in 
-            Tensor.sub (te, fst+i)
+            Tensor.sub (te, Index.+(fndx, i))
         end
 
-        fun setindex (w: 'a window) i v =
+        fun update (w: 'a window) i v =
         let
            val te  = base w
            val ra  = range w
-           val fst = Index.toInt (Range.first ra)
+           val fst = Range.first ra
         in 
-            Tensor.update (te, fst+i, v)
+            Tensor.update (te, Index.+(fst,i), v)
         end
 
         fun copy arr win =
@@ -1888,6 +1891,21 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
                 then Array.copy {src=arr, dst=arr, di=boff}
                 else raise Index.Shape
             end
+
+        fun find f (win: 'a window) = 
+        let
+           val te   = base win
+           val ra   = range win
+           val res  = ref NONE
+        in 
+            Range.iteri (fn (ndx) =>
+                            let
+                                val v = Tensor.sub (te,ndx)
+                            in
+                                if f v then (res := SOME v; false) else true
+                            end) ra;
+            !res
+        end
 
         fun map f win = 
         let
@@ -1932,8 +1950,6 @@ structure TensorSlidingWindow : TENSOR_SLIDING_WINDOW =
         in 
            Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
         end
-
-
 
         fun binop f (w1: 'a window) (w2: 'a window) (output: 'a window) = 
         let
@@ -2118,14 +2134,16 @@ signature MONO_TENSOR_SLIDING_WINDOW =
         val shiftr : window -> bool
         val reset : window -> unit
 
+        val sub : window -> index -> elem
+        val update :  window -> index -> elem -> unit
+
         val copy : Tensor.Array.array -> window -> unit
 
+        val find : (elem -> bool) -> window -> elem option
         val app : (elem -> unit) -> window -> unit
         val map : (elem -> elem) -> window -> tensor
         val foldl  : (elem * 'a -> 'a) -> 'a -> window -> 'a
         val modifyi  : (index * elem -> elem) -> window -> unit
-
-
     end
 
 (*
@@ -3971,6 +3989,25 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
         fun shiftr win = Range.shiftr (range win)
         fun reset win = Range.reset (range win)
 
+        fun sub w i =
+        let
+           val te   = base w
+           val tb   = Tensor.toArray
+           val ra   = range w
+           val fndx = Range.first ra
+        in 
+            Tensor.sub (te, Index.+(fndx, i))
+        end
+
+        fun update w i v =
+        let
+           val te  = base w
+           val ra  = range w
+           val fst = Range.first ra
+        in 
+            Tensor.update (te, Index.+(fst,i), v)
+        end
+
         fun copy arr win =
             let
                 val te    = base win
@@ -3984,6 +4021,21 @@ structure RTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
                 then Tensor.Array.copy {src=arr, dst=arr, di=boff}
                 else raise Index.Shape
             end
+
+        fun find f win = 
+        let
+           val te   = base win
+           val ra   = range win
+           val res  = ref NONE
+        in 
+            Range.iteri (fn (ndx) =>
+                            let
+                                val v = Tensor.sub (te,ndx)
+                            in
+                                if f v then (res := SOME v; false) else true
+                            end) ra;
+            !res
+        end
 
         fun map f win = 
         let

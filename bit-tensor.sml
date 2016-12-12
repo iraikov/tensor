@@ -352,3 +352,166 @@ structure BitTensorSlice =
 
     end                                
 
+
+
+structure BitTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
+    struct
+        structure Tensor = BitTensor
+        structure Index  = Tensor.Index
+        structure Range  = SlidingRange
+        structure Array  = Tensor.Array
+            
+        type index = Tensor.Index.t
+        type range = SlidingRange.t
+        type tensor = BitTensor.tensor
+        type elem = Array.elem
+
+        type window = {range : range, tensor : tensor}
+
+        fun length ({range, tensor}) = Range.length range
+        fun base ({range, tensor})   = tensor
+        fun stride ({range, tensor}) = Range.stride range
+        fun shapes ({range, tensor}) = Range.shapes range
+        fun range ({range, tensor})  = range
+
+        fun full tensor =
+            let val shape  = Tensor.shape tensor
+                val stride = List.tabulate (Tensor.rank tensor, fn(i) => 0)
+                val r = Range.fromto shape stride (Index.first shape,Index.last shape)
+            in
+                {range=r, tensor=tensor}
+            end
+
+        fun fromto (lo,up,stride,tensor) =
+            let val r = Range.fromto (Tensor.shape tensor) stride (lo,up)
+            in
+                {range=r, tensor=tensor}
+            end
+
+        fun fromto' (lo,up,stride,tensor) =
+            let val r = Range.fromto' (Tensor.shape tensor) stride (lo,up)
+            in
+                {range=r, tensor=tensor}
+            end
+
+        fun shiftr win = Range.shiftr (range win)
+        fun reset win = Range.reset (range win)
+
+        fun sub w i =
+        let
+           val te   = base w
+           val tb   = Tensor.toArray
+           val ra   = range w
+           val fndx = Range.first ra
+        in 
+            Tensor.sub (te, Index.+(fndx, i))
+        end
+
+        fun update w i v =
+        let
+           val te  = base w
+           val ra  = range w
+           val fst = Range.first ra
+        in 
+            Tensor.update (te, Index.+(fst,i), v)
+        end
+
+        fun copy arr win =
+            let
+                val te    = base win
+                val tb    = Tensor.toArray te
+                val ra    = range win
+                val fndx  = Range.first ra
+                val len   = length win
+                val boff  = Index.toInt (Tensor.shape te) fndx
+            in
+                if len = Tensor.Array.length arr
+                then Tensor.Array.copy {src=arr, dst=tb, di=boff}
+                else raise Index.Shape
+            end
+
+        fun find f win = 
+        let
+           val te   = base win
+           val ra   = range win
+           val res  = ref NONE
+        in 
+            Range.iteri (fn (ndx) =>
+                            let
+                                val v = Tensor.sub (te,ndx)
+                            in
+                                if f v then (res := SOME v; false) else true
+                            end) ra;
+            !res
+        end
+
+        fun map f win = 
+        let
+           val te    = base win
+           val ra    = range win
+           val len   = length win
+           val fndx  = Range.first ra
+           val arr   = Array.array (length win, f (Tensor.sub (te,fndx)))
+           val i     = ref 0
+        in 
+           Range.iteri (fn (ndx) => let val v = f (Tensor.sub (te,ndx)) in (Array.update (arr, !i, v); i := (!i + 1); true) end) ra;
+           Tensor.fromArray ([1,len], arr)
+        end
+
+        fun app f (win: window) = 
+        let
+           val te   = base win
+           val ra   = range win
+        in 
+           Range.iteri (fn (ndx) => (f (Tensor.sub (te,ndx)); true)) ra; ()
+        end
+
+        fun foldl f init (win: window) = 
+        let
+           val te     = base win
+           val sh     = Tensor.shape te
+           val arr    = Tensor.toArray te
+           val ra     = range win
+        in 
+            Range.foldi_range
+                (fn ((i,j),ax) => 
+                    Loop.foldi (Index.toInt sh i, (Index.toInt sh j)+1,
+                             fn (n,ax) => f (Array.sub (arr,n),ax), 
+                                ax))
+                init ra
+        end
+
+        fun modifyi f (win: window) = 
+        let
+           val te   = base win
+           val ra   = range win
+        in 
+           Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
+        end
+
+
+        fun binop f (w1: window) (w2: window) (output: window) = 
+        let
+           val _      = if not (((stride w1) = (stride w2)) andalso 
+                                ((stride w1) = (stride output)))
+                                then raise Index.Shape else ()
+           val te1    = base w1
+           val te2    = base w2
+           val ra1    = range w1
+           val ra2    = range w2
+           val len    = length w1
+           val teout  = base output
+           val raout  = range output
+        in 
+            Range.iteri3 (fn (ndx1,ndx2,idxout) => 
+                             let 
+                                 val v = f (Tensor.sub (te1,ndx1),Tensor.sub (te2,ndx2)) 
+                             in 
+                                 (Tensor.update (teout, idxout, v); true)
+                             end) 
+                         (ra1,ra2,raout);
+            output
+
+        end
+
+    end                                

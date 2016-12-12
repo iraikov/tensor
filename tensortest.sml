@@ -54,18 +54,31 @@ val _ =
         val _ = putStr (TextIO.stdOut, "shape win = ")
         val _ = TensorFile.intListWrite TextIO.stdOut (SlidingRange.shape (RTensorSlidingWindow.range win))
     in
+        putStr (TextIO.stdOut, "win [0,0] = "); 
+        TensorFile.realWrite (TextIO.stdOut) (RTensorSlidingWindow.sub win [0,0]);
+        putStr (TextIO.stdOut, "win [1,0] = "); 
+        TensorFile.realWrite (TextIO.stdOut) (RTensorSlidingWindow.sub win [1,0]);
         putStr (TextIO.stdOut, "win stride 0 = "); 
         RTensorSlidingWindow.app (fn (v) => TensorFile.realWrite (TextIO.stdOut) v) win;
         RTensorSlidingWindow.shiftr win;
+        putStr (TextIO.stdOut, "win [0,0] = "); 
+        TensorFile.realWrite (TextIO.stdOut) (RTensorSlidingWindow.sub win [0,0]);
+        putStr (TextIO.stdOut, "win [1,0] = "); 
+        TensorFile.realWrite (TextIO.stdOut) (RTensorSlidingWindow.sub win [1,0]);
         putStr (TextIO.stdOut, "win stride 1 = "); 
         RTensorSlidingWindow.app (fn (v) => TensorFile.realWrite (TextIO.stdOut) v) win;
         RTensorSlidingWindow.shiftr win;
+        putStr (TextIO.stdOut, "win [0,0] = "); 
+        TensorFile.realWrite (TextIO.stdOut) (RTensorSlidingWindow.sub win [0,0]);
+        putStr (TextIO.stdOut, "win [1,0] = "); 
+        TensorFile.realWrite (TextIO.stdOut) (RTensorSlidingWindow.sub win [1,0]);
         putStr (TextIO.stdOut, "win stride 2 = "); 
         RTensorSlidingWindow.app (fn (v) => TensorFile.realWrite (TextIO.stdOut) v) win;
         RTensorSlidingWindow.reset win;
         putStr (TextIO.stdOut, "win stride 0 after reset = "); 
         RTensorSlidingWindow.app (fn (v) => TensorFile.realWrite (TextIO.stdOut) v) win
     end
+
 
 
 val _ = print "fromList: "
@@ -92,12 +105,10 @@ val _ = (print "A(3,1) = "; TensorFile.realWrite (TextIO.stdOut) v)
 val _ = print "slice: "
 val sl = RTensorSlice.slice ([([0,1],[2,1])],A)
 val _  = TensorFile.realTensorLineWrite (TextIO.stdOut) (RTensorSlice.map (fn (x) => x) sl)
-val _ = putStrLn (TextIO.stdOut, "slice length: " ^ (Int.toString (RTensorSlice.length sl)))
 
 val _ = print "slice: "
 val sl = RTensorSlice.slice ([([3,0],[3,1]),([1,0],[1,1])],A)
 val _  = TensorFile.realTensorLineWrite (TextIO.stdOut) (RTensorSlice.map (fn (x) => x) sl)
-val _ = putStrLn (TextIO.stdOut, "slice length: " ^ (Int.toString (RTensorSlice.length sl)))
 
 val _ = print "realRandomTensor: "
 
@@ -273,10 +284,7 @@ val _ = (print "S(3,2) = "; TensorFile.realWrite (TextIO.stdOut) v)
 val v = RTensor.sub (S,[3,3])
 val _ = (print "S(3,3) = "; TensorFile.realWrite (TextIO.stdOut) v)
 
-val r  = Range.fromto' (RTensor.shape SN) ([0,0],[1,4])
-val _ = (putStr (TextIO.stdOut, "shape r = "); 
-         TensorFile.intListWrite TextIO.stdOut (Index.prev' (RTensor.shape SN) [1,4]))
-val _ = putStrLn (TextIO.stdOut, "length r = " ^ (Int.toString (Range.length r)))
+val r  = Range.fromto (RTensor.shape SN) ([0,0],[1,4])
 val xs = Range.foldi_range
              (fn ((i,j),ax) => (Index.toInt (RTensor.shape SN) i,
                                 Index.toInt (RTensor.shape SN) j) :: ax)

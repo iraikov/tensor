@@ -416,6 +416,26 @@ structure BitTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
             Tensor.update (te, Index.+(fst,i), v)
         end
 
+        fun ptr_sub w i =
+        let
+           val te   = base w
+           val tb   = Tensor.toArray te
+           val ra   = range w
+           val ptr  = Range.ptr ra
+        in 
+            Array.sub (tb, ptr+i)
+        end
+
+        fun ptr_update w i v =
+        let
+           val te  = base w
+           val ra  = range w
+           val tb  = Tensor.toArray te
+           val ptr = Range.ptr ra
+        in 
+            Array.update (tb, ptr+i, v)
+        end
+
         fun copy arr win =
             let
                 val te    = base win
@@ -489,29 +509,60 @@ structure BitTensorSlidingWindow : MONO_TENSOR_SLIDING_WINDOW =
            Range.iteri (fn (ndx) => (Tensor.update(te, ndx, f (ndx, Tensor.sub (te,ndx))); true)) ra; ()
         end
 
+        fun unop f (w1: window) (output: window) = 
+        let
+           val _      = if not ((stride w1) = (stride output))
+                                then raise Index.Shape else ()
+           val len    = length w1
+           val te1    = base w1
+           val ra1    = range w1
+           val ptr1    = Range.ptr ra1
+           val a1     = Tensor.toArray te1
+           val teout  = base output
+           val raout  = range output
+           val aout   = Tensor.toArray teout
+           val ptrout = Range.ptr raout
+
+        in
+            Loop.app2 (ptr1, ptr1+len, ptrout, ptrout+len,
+                       fn (i1, i2) =>
+                          let 
+                                 val v = f (Array.sub (a1,i1))
+                             in 
+                                 Array.update (aout, i2, v)
+                          end); 
+            output
+        end
+
 
         fun binop f (w1: window) (w2: window) (output: window) = 
         let
            val _      = if not (((stride w1) = (stride w2)) andalso 
                                 ((stride w1) = (stride output)))
                                 then raise Index.Shape else ()
+           val len    = length w1
            val te1    = base w1
            val te2    = base w2
            val ra1    = range w1
            val ra2    = range w2
-           val len    = length w1
+           val ptr1    = Range.ptr ra1
+           val ptr2    = Range.ptr ra2
+           val a1     = Tensor.toArray te1
+           val a2     = Tensor.toArray te2
            val teout  = base output
            val raout  = range output
-        in 
-            Range.iteri3 (fn (ndx1,ndx2,idxout) => 
-                             let 
-                                 val v = f (Tensor.sub (te1,ndx1),Tensor.sub (te2,ndx2)) 
-                             in 
-                                 (Tensor.update (teout, idxout, v); true)
-                             end) 
-                         (ra1,ra2,raout);
-            output
+           val aout   = Tensor.toArray teout
+           val ptrout = Range.ptr raout
 
+        in
+            Loop.app3 (ptr1, ptr1+len, ptr2, ptr2+len, ptrout, ptrout+len,
+                       fn (i1, i2, i3) =>
+                          let 
+                                 val v = f (Array.sub (a1,i1),Array.sub (a2,i2))
+                             in 
+                                 Array.update (aout, i3, v)
+                          end); 
+            output
         end
 
     end                                

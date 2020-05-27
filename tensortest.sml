@@ -33,6 +33,11 @@ fun putStr (file, str) =
     (TextIO.output (file, str))
 
 
+exception Assert
+
+fun assert true = ()
+  | assert false = raise Assert
+
 val _ = print "slidingWindow: "
 val _ = 
     let
@@ -437,6 +442,43 @@ val _ = Loop.app
             (0,100,fn (i) => 
                       putStrLn (TextIO.stdOut,
                                 ("sample(" ^ (Int.toString i) ^ ") = " ^ (Int.toString (Array.sub(sample, i))))))
+fun dot a b =
+  let 
+      val [ra,ca] = RTensor.shape a
+      val [rb,cb] = RTensor.shape b
 
+      val _ = assert(ca = rb)
+                    
+      val y = RTensor.new ([ra, cb], 0.0)
+  in
+      Loop.app (0, cb, 
+                (fn (icb) =>
+                    Loop.app (0, ra,
+                              fn(ira) =>
+                                 let val absum =
+                                         Loop.foldi (0, ca, 
+                                                     (fn (i, sum) =>
+                                                         let val ai  = RTensor.sub (a,[ira,i])
+                                                             val bi =  RTensor.sub (b,[icb,i])
+                                                         in
+                                                             sum + ai*bi
+                                                         end), 0.0)
+                                 in
+                                     RTensor.update(y, [ira, icb], absum)
+                                 end)));
+      y
+  end
+
+val a = RTensor.fromList ([2,2],[1.0, 0.0, 0.0, 1.0])
+val _  = TensorFile.realTensorWrite (TextIO.stdOut) a
+
+val b = RTensor.fromList ([2,2],[4.0, 1.0, 2.0, 2.0])
+val _  = TensorFile.realTensorWrite (TextIO.stdOut) b
+
+val t = dot a b
+
+val _  = TensorFile.realTensorWrite (TextIO.stdOut) t
+
+      
 
 end
